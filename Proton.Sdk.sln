@@ -32,6 +32,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Protos", "Protos", "{92DB46
 		protos\drive.proto = protos\drive.proto
 	EndProjectSection
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "unofficial-pdrive-http-bridge", "unofficial-pdrive-http-bridge\unofficial-pdrive-http-bridge.csproj", "{98DAD2D2-0631-4FA2-B19F-DCD608209D87}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -62,6 +64,10 @@ Global
 		{4E5500E6-778E-44F4-AE67-B881D4197346}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4E5500E6-778E-44F4-AE67-B881D4197346}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4E5500E6-778E-44F4-AE67-B881D4197346}.Release|Any CPU.Build.0 = Release|Any CPU
+		{98DAD2D2-0631-4FA2-B19F-DCD608209D87}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{98DAD2D2-0631-4FA2-B19F-DCD608209D87}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{98DAD2D2-0631-4FA2-B19F-DCD608209D87}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{98DAD2D2-0631-4FA2-B19F-DCD608209D87}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
