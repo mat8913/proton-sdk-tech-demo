@@ -100,6 +100,7 @@ public abstract class EventChannelBase<TEventId>
                 {
                     Owner.BaselineEventId = await GetLatestEventIdAsync(cancellationToken).ConfigureAwait(false);
 
+                    _timer.Change(_pollingInterval, _pollingInterval);
                     return;
                 }
 
