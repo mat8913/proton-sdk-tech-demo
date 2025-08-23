@@ -4,14 +4,20 @@ namespace Proton.Sdk.Drive;
 
 public sealed class VolumeEventChannel(ProtonDriveClient client, VolumeId volumeId) : EventChannelBase<VolumeEventId>
 {
-    public event Action<INode>? NodeCreated;
-    public event Action<INode>? NodeMetadataChanged;
-    public event Action<FileNode>? FileContentsChanged;
-    public event Action<VolumeId, LinkId>? NodeDeleted;
+    public event Action<VolumeEventId, INode>? NodeCreated;
+    public event Action<VolumeEventId, INode>? NodeMetadataChanged;
+    public event Action<VolumeEventId, FileNode>? FileContentsChanged;
+    public event Action<VolumeEventId, VolumeId, LinkId>? NodeDeleted;
 
     public VolumeId VolumeId { get; } = volumeId;
 
     private ProtonDriveClient Client { get; } = client;
+
+    public async Task<VolumeEventId> GetLatestEventIdAsync(CancellationToken cancellationToken)
+    {
+        await using var poller = new EventPoller(this);
+        return await poller.GetLatestEventIdAsync2(cancellationToken);
+    }
 
     private protected override IEventPoller CreateEventPoller()
     {
@@ -42,7 +48,7 @@ public sealed class VolumeEventChannel(ProtonDriveClient client, VolumeId volume
         }
     }
 
-    private async ValueTask DispatchNodeEventAsync(LinkEventDto dto, Action<INode>? handlers, CancellationToken cancellationToken)
+    private async ValueTask DispatchNodeEventAsync(LinkEventDto dto, Action<VolumeEventId, INode>? handlers, CancellationToken cancellationToken)
     {
         if (handlers == null)
         {
@@ -51,7 +57,7 @@ public sealed class VolumeEventChannel(ProtonDriveClient client, VolumeId volume
 
         var node = await Node.GetAsync(Client, new ShareId(dto.ContextShareId), dto.Link, cancellationToken).ConfigureAwait(false);
 
-        handlers.Invoke(node);
+        handlers.Invoke(new(dto.Id), node);
     }
 
     private async ValueTask DispatchFileContentsChangedEventAsync(LinkEventDto dto, CancellationToken cancellationToken)
@@ -68,12 +74,12 @@ public sealed class VolumeEventChannel(ProtonDriveClient client, VolumeId volume
             return;
         }
 
-        handlers.Invoke(file);
+        handlers.Invoke(new(dto.Id), file);
     }
 
     private void DispatchNodeDeletedEvent(DeletedLinkEventDto dto)
     {
-        NodeDeleted?.Invoke(VolumeId, new LinkId(dto.Link.Id));
+        NodeDeleted?.Invoke(new(dto.Id), VolumeId, new LinkId(dto.Link.Id));
     }
 
     private sealed class EventPoller(VolumeEventChannel owner) : EventPollerBase<IReadOnlyList<EventDto>>
@@ -81,6 +87,9 @@ public sealed class VolumeEventChannel(ProtonDriveClient client, VolumeId volume
         private readonly VolumeEventChannel _owner = owner;
 
         protected override EventChannelBase<VolumeEventId> Owner => _owner;
+
+        public ValueTask<VolumeEventId> GetLatestEventIdAsync2(CancellationToken cancellationToken)
+            => GetLatestEventIdAsync(cancellationToken);
 
         protected override async ValueTask<VolumeEventId> GetLatestEventIdAsync(CancellationToken cancellationToken)
         {

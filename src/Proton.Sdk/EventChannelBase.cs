@@ -10,7 +10,7 @@ public abstract class EventChannelBase<TEventId>
         void Start();
     }
 
-    public TEventId? BaselineEventId { get; private set; }
+    public TEventId? BaselineEventId { get; set; }
 
     public void Start()
     {
