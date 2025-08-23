@@ -14,7 +14,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Configuration", "Configurat
 		.editorconfig = .editorconfig
 		.globalconfig = .globalconfig
 		Directory.Build.props = Directory.Build.props
-		Directory.Packages.props = Directory.Packages.props
+		src\Directory.Packages.props = Directory.Packages.props
 		README.md = README.md
 	EndProjectSection
 EndProject
