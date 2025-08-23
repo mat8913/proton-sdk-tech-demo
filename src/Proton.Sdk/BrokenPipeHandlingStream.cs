@@ -171,11 +171,7 @@ internal sealed class BrokenPipeHandlingStream(Stream innerStream, int socketStr
 
         var stream = new NetworkStream(socket, true);
 
-#if DEBUG
-        return new SocketExceptionThrowingStream(stream, PosixEpipeErrorCode);
-#else
         return stream;
-#endif
     }
 
     private static async ValueTask<Stream> ApplyDualModeSocketStrategy(
@@ -194,11 +190,7 @@ internal sealed class BrokenPipeHandlingStream(Stream innerStream, int socketStr
 
         var stream = new NetworkStream(socket, true);
 
-#if DEBUG
-        return new SocketExceptionThrowingStream(stream, PosixEpipeErrorCode);
-#else
         return stream;
-#endif
     }
 
     private static async ValueTask<Stream> ApplyForcedIPv4SocketStrategy(
