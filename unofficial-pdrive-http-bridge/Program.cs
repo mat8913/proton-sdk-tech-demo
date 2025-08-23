@@ -33,18 +33,21 @@ public sealed class Program
         PersistenceManager persistenceManager = new(dbFile);
         SessionStorage sessionStorage = new(persistenceManager);
 
-        var session = ResumeSession(persistenceManager, sessionStorage, true);
+        var session = ResumeSession(persistenceManager, sessionStorage, false);
         var client = new ProtonDriveClient(session);
         var volumes = await client.GetVolumesAsync(ct);
 
         var mainVolume = volumes[0];
-        var share = await client.GetShareAsync(mainVolume.RootShareId, ct);
-        var children = client.GetFolderChildrenAsync(new NodeIdentity(share.ShareId, mainVolume.Id, share.RootNodeId), ct);
 
-        await foreach (var child in children)
-        {
-            Console.WriteLine(child.Name);
-        }
+        // Idea for this: if we're listing, stop the eventChannel first to prevent race condition. Then resume.
+        var eventChannel = new VolumeEventChannel(client, volumes[0].Id);
+        var eventHandler = new VolumeEventHandler(volumes[0].Id);
+        eventHandler.Connect(eventChannel);
+        eventChannel.BaselineEventId = new("");
+        eventChannel.Start();
+
+        Console.WriteLine("Started event listener");
+        await Task.Delay(-1);
 
         return 0;
     }
