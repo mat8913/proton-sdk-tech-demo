@@ -1,3 +1,4 @@
+using System;
 using Proton.Sdk.Drive;
 
 namespace unofficial_pdrive_http_bridge;

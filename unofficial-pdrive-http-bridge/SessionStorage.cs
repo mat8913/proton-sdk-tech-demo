@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+
 namespace unofficial_pdrive_http_bridge;
 
 public sealed class SessionStorage
