@@ -50,6 +50,13 @@ public sealed partial class Share : IShare
         };
     }
 
+    internal static async Task<ShareId[]> GetShareIdsAsync(ProtonDriveClient client, CancellationToken cancellationToken)
+    {
+        var fetchedShares = await client.SharesApi.GetSharesAsync(cancellationToken);
+
+        return fetchedShares.Shares.Select(x => new ShareId(x.Id)).ToArray();
+    }
+
     internal static async Task DeleteFromTrashAsync(SharesApiClient client, ShareId shareId, IEnumerable<LinkId> nodeIds, CancellationToken cancellationToken)
     {
         var parameters = new MultipleLinkActionParameters { LinkIds = nodeIds.Select(x => x.Value) };

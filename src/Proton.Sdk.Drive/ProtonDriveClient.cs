@@ -92,6 +92,11 @@ public sealed class ProtonDriveClient
         return Share.GetAsync(this, shareId, cancellationToken);
     }
 
+    public Task<ShareId[]> GetShareIdsAsync(CancellationToken cancellationToken)
+    {
+        return Share.GetShareIdsAsync(this, cancellationToken);
+    }
+
     public Task DeleteFromTrashAsync(ShareId shareId, IEnumerable<LinkId> nodeIds, CancellationToken cancellationToken)
     {
         return Share.DeleteFromTrashAsync(SharesApi, shareId, nodeIds, cancellationToken);
