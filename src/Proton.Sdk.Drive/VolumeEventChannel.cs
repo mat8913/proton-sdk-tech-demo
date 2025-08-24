@@ -13,6 +13,12 @@ public sealed class VolumeEventChannel(ProtonDriveClient client, VolumeId volume
 
     private ProtonDriveClient Client { get; } = client;
 
+    public async Task<VolumeEventId> GetLatestEventIdAsync(CancellationToken cancellationToken)
+    {
+        await using var poller = new EventPoller(this);
+        return await poller.GetLatestEventIdAsync2(cancellationToken);
+    }
+
     private protected override IEventPoller CreateEventPoller()
     {
         return new EventPoller(this);
@@ -81,6 +87,9 @@ public sealed class VolumeEventChannel(ProtonDriveClient client, VolumeId volume
         private readonly VolumeEventChannel _owner = owner;
 
         protected override EventChannelBase<VolumeEventId> Owner => _owner;
+
+        public ValueTask<VolumeEventId> GetLatestEventIdAsync2(CancellationToken cancellationToken)
+            => GetLatestEventIdAsync(cancellationToken);
 
         protected override async ValueTask<VolumeEventId> GetLatestEventIdAsync(CancellationToken cancellationToken)
         {

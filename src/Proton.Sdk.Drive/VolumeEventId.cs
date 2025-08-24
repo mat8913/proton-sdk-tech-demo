@@ -2,7 +2,7 @@
 
 public readonly record struct VolumeEventId(string Value)
 {
-    internal string Value { get; } = Value;
+    public string Value { get; } = Value;
 
     public override string ToString()
     {
