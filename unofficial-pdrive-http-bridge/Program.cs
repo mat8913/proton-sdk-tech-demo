@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -50,7 +51,11 @@ public sealed class Program
         var client = new ProtonDriveClient(apiSession);
         _session = new(apiSession, client);
 
-        // TODO: Check if share id changes when descending directories
+        /*
+        // Q: Does share id change when descending directories
+        // A: Seems not to. Different share ids can refer to the same object.
+        //    Only the (volumeId, nodeId) seem to identify an object. The shareId seems more
+        //    like a ticket to access the object.
         var shareIds = await _session.Value.ProtonDriveClient.GetShareIdsAsync(ct);
         foreach (var shareId in shareIds)
         {
@@ -64,6 +69,7 @@ public sealed class Program
             }
             Console.WriteLine();
         }
+        */
 
         WebserverSettings settings = new WebserverSettings("127.0.0.1", 9000);
         WebserverBase server = new WebserverLite(settings, OnDefaultRoute);
@@ -76,7 +82,7 @@ public sealed class Program
 
         server.Routes.PostAuthentication.Parameter.Add(
             HttpMethod.GET,
-            "/volumes/{volumeId}/node-metadata/by-id/{nodeId}",
+            "/volumes/{volumeId}/shares/{shareId}/node-metadata/by-id/{nodeId}",
             OnGetNodeMetadataByIdRequest);
 
         await server.StartAsync(ct);
@@ -121,10 +127,45 @@ public sealed class Program
 
     private async Task OnGetNodeMetadataByIdRequest(HttpContextBase ctx)
     {
-        // TODO: Implement this
+        if (!_session.HasValue)
+        {
+            // TODO: Redirect to login
+            throw new InvalidOperationException("Session not initialized");
+        }
+
         var volumeId = ctx.Request.Url.Parameters["volumeId"];
-        var nodeId = ctx.Request.Url.Parameters["nodeId"];
-        await ctx.Response.Send($"VolumeId: {volumeId}, NodeId: {nodeId}");
+        var shareId = ctx.Request.Url.Parameters["shareId"] ?? throw new ArgumentNullException("shareId");
+        var nodeId = ctx.Request.Url.Parameters["nodeId"] ?? throw new ArgumentNullException("nodeId");
+
+        var node = await _session.Value.ProtonDriveClient.GetNodeAsync(new(shareId), new(nodeId), ctx.Token);
+
+        var metadata = new NodeMetadata
+        {
+            Name = node.Name,
+            ParentId = node.ParentId?.Value,
+            State = node.State.ToString(),
+        };
+
+        if (node is FileNode fileNode)
+        {
+            metadata.ActiveRevisionId = fileNode.ActiveRevision?.RevisionId?.Value;
+            metadata.Size = fileNode.ActiveRevision?.Size;
+            metadata.Type = "File";
+        }
+        else if (node is FolderNode)
+        {
+            metadata.Type = "Folder";
+        }
+        else
+        {
+            metadata.Type = node.GetType()?.ToString();
+        }
+
+        // TODO: Should look at Accept header
+
+        ctx.Response.ContentType = "application/json";
+
+        await ctx.Response.Send(JsonSerializer.SerializeToUtf8Bytes(metadata));
     }
 
     private async Task OnAuthenticateRequest(HttpContextBase ctx)
