@@ -203,9 +203,17 @@ public sealed class Program
         var node = await _session.Value.ProtonDriveClient.GetNodeAsync(new(shareId), new(nodeId), ctx.Token);
         var nodeIdentity = new NodeIdentity(new(shareId), new(volumeId), new(nodeId));
 
-        if (node is FileNode)
+        if (node is FileNode fileNode)
         {
-            throw new NotImplementedException("file content not implemented");
+            using var downloader = await _session.Value.ProtonDriveClient.WaitForFileDownloaderAsync(ctx.Token);
+            await using var outputStream = new HttpResponseStream(ctx);
+
+            ctx.Response.StatusCode = 200;
+            ctx.Response.ChunkedTransfer = true;
+            await downloader.DownloadAsync(nodeIdentity, fileNode.ActiveRevision, outputStream, (_, _) => { }, ctx.Token);
+            await ctx.Response.SendChunk(Array.Empty<byte>(), true);
+
+            return null;
         }
 
         var children = _session.Value.ProtonDriveClient
