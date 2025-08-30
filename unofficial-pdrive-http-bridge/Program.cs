@@ -194,7 +194,7 @@ public sealed class Program
     {
         var savedSession = await sessionStorage.TryLoadSession(ct) ?? throw new InvalidOperationException("no saved session");
 
-        var secretsCache = new SqlSecretsCache(persistenceManager);
+        var secretsCache = new DbSecretsCache(persistenceManager);
 
         var options = new ProtonClientOptions
         {
