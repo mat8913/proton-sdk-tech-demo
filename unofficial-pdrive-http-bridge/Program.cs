@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Proton.Sdk;
 using Proton.Sdk.Drive;
@@ -47,7 +48,13 @@ public sealed class Program
 
     public async Task<int> Run(string[] argv, CancellationToken ct)
     {
-        var apiSession = ResumeSession(_persistenceManager, _sessionStorage, false);
+        await using (var db = _persistenceManager.GetProgramDbContext())
+        {
+            await db.Database.MigrateAsync(ct);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var apiSession = await ResumeSession(_persistenceManager, _sessionStorage, false, ct);
         var client = new ProtonDriveClient(apiSession);
         _session = new(apiSession, client);
 
@@ -179,12 +186,13 @@ public sealed class Program
         await ctx.Response.Send();
     }
 
-    private ProtonApiSession ResumeSession(
+    private async Task<ProtonApiSession> ResumeSession(
         PersistenceManager persistenceManager,
         SessionStorage sessionStorage,
-        bool enableSdkLog)
+        bool enableSdkLog,
+        CancellationToken ct)
     {
-        var hasStoredSession = sessionStorage.TryLoadSession(out var savedSession);
+        var savedSession = await sessionStorage.TryLoadSession(ct) ?? throw new InvalidOperationException("no saved session");
 
         var secretsCache = new SqlSecretsCache(persistenceManager);
 
