@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
+using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -190,11 +191,22 @@ public sealed class Program
             var model = await func(ctx);
             if (model is not null)
             {
-                // ctx.Response.ContentType = "application/json";
-                // await ctx.Response.Send(model.ToJson());
+                // TODO: match wildcards
+                var accepts = ctx.Request.Headers["Accept"]?.Split(',')
+                    .Select(MediaTypeWithQualityHeaderValue.Parse)
+                    .OrderByDescending(mt => mt.Quality.GetValueOrDefault(1))
+                    .FirstOrDefault(mt => mt.MediaType == "application/json" || mt.MediaType == "text/html");
 
-                ctx.Response.ContentType = "text/html";
-                await ctx.Response.Send(model.ToHtml());
+                if (accepts is null || accepts.MediaType == "application/json")
+                {
+                    ctx.Response.ContentType = "application/json";
+                    await ctx.Response.Send(model.ToJson());
+                }
+                else
+                {
+                    ctx.Response.ContentType = "text/html";
+                    await ctx.Response.Send(model.ToHtml());
+                }
             }
         };
     }
