@@ -1,7 +1,6 @@
 ﻿using System;
 using System.IO;
 using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -78,8 +77,13 @@ public sealed class Program
         }
         */
 
+        var webserverLogger = _loggerFactory.CreateLogger<WebserverLite>();
         WebserverSettings settings = new WebserverSettings("127.0.0.1", 9000);
+        settings.Debug.Requests = true;
+        settings.Debug.Responses = true;
         WebserverBase server = new WebserverLite(settings, OnDefaultRoute);
+        server.Events.Logger = msg => webserverLogger.LogInformation("{msg}", msg);
+
         server.Routes.AuthenticateRequest = OnAuthenticateRequest;
 
         server.Routes.PostAuthentication.Static.Add(
@@ -90,7 +94,7 @@ public sealed class Program
         server.Routes.PostAuthentication.Parameter.Add(
             HttpMethod.GET,
             "/volumes/{volumeId}/shares/{shareId}/node-metadata/by-id/{nodeId}",
-            OnGetNodeMetadataByIdRequest);
+            ToHandler(OnGetNodeMetadataByIdRequest));
 
         await server.StartAsync(ct);
         return 0;
@@ -132,7 +136,7 @@ public sealed class Program
         await ctx.Response.Send(builder.ToString());
     }
 
-    private async Task OnGetNodeMetadataByIdRequest(HttpContextBase ctx)
+    private async Task<HttpModels.NodeMetadata?> OnGetNodeMetadataByIdRequest(HttpContextBase ctx)
     {
         if (!_session.HasValue)
         {
@@ -146,7 +150,7 @@ public sealed class Program
 
         var node = await _session.Value.ProtonDriveClient.GetNodeAsync(new(shareId), new(nodeId), ctx.Token);
 
-        var metadata = new NodeMetadata
+        var metadata = new HttpModels.NodeMetadata
         {
             Name = node.Name,
             ParentId = node.ParentId?.Value,
@@ -157,22 +161,18 @@ public sealed class Program
         {
             metadata.ActiveRevisionId = fileNode.ActiveRevision?.RevisionId?.Value;
             metadata.Size = fileNode.ActiveRevision?.Size;
-            metadata.Type = "File";
+            metadata.Type = HttpModels.NodeType.File;
         }
         else if (node is FolderNode)
         {
-            metadata.Type = "Folder";
+            metadata.Type = HttpModels.NodeType.Folder;
         }
         else
         {
-            metadata.Type = node.GetType()?.ToString();
+            throw new InvalidOperationException($"Unknown node type: {node.GetType()}");
         }
 
-        // TODO: Should look at Accept header
-
-        ctx.Response.ContentType = "application/json";
-
-        await ctx.Response.Send(JsonSerializer.SerializeToUtf8Bytes(metadata));
+        return metadata;
     }
 
     private async Task OnAuthenticateRequest(HttpContextBase ctx)
@@ -184,6 +184,23 @@ public sealed class Program
         ctx.Response.StatusCode = 401;
         ctx.Response.Headers["WWW-Authenticate"] = "Basic realm=\"User Visible Realm\", charset=\"UTF-8\"";
         await ctx.Response.Send();
+    }
+
+    private Func<HttpContextBase, Task> ToHandler<T>(Func<HttpContextBase, Task<T?>> func)
+        where T : class, IHttpModel
+    {
+        return async ctx =>
+        {
+            var model = await func(ctx);
+            if (model is not null)
+            {
+                // ctx.Response.ContentType = "application/json";
+                // await ctx.Response.Send(model.ToJson());
+
+                ctx.Response.ContentType = "text/html";
+                await ctx.Response.Send(model.ToHtml());
+            }
+        };
     }
 
     private async Task<ProtonApiSession> ResumeSession(
