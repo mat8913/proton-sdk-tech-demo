@@ -40,6 +40,8 @@ public sealed class NodeMetadata : IHttpModel
         </table>
     """);
 
+    public string? NodeId { get; set; }
+
     public string? Name { get; set; }
 
     public string? ParentId { get; set; }
@@ -52,6 +54,8 @@ public sealed class NodeMetadata : IHttpModel
 
     [JsonConverter(typeof(JsonStringEnumConverter<NodeType>))]
     public NodeType Type { get; set; }
+
+    public string? Url { get; set; }
 
     public byte[] ToJson() => JsonSerializer.SerializeToUtf8Bytes(this);
 

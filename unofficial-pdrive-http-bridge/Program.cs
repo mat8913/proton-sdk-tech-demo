@@ -99,6 +99,11 @@ public sealed class Program
             "/volumes/{volumeId}/shares/{shareId}/node-metadata/by-id/{nodeId}",
             ToHandler(OnGetNodeMetadataByIdRequest));
 
+        server.Routes.PostAuthentication.Parameter.Add(
+            HttpMethod.GET,
+            "/volumes/{volumeId}/shares/{shareId}/node-content/by-id/{nodeId}",
+            ToHandler(OnGetNodeContentByIdRequest));
+
         await server.StartAsync(ct);
         return 0;
     }
@@ -143,17 +148,26 @@ public sealed class Program
             throw new InvalidOperationException("Session not initialized");
         }
 
-        var volumeId = ctx.Request.Url.Parameters["volumeId"];
+        var volumeId = ctx.Request.Url.Parameters["volumeId"] ?? throw new ArgumentNullException("volumeId");
         var shareId = ctx.Request.Url.Parameters["shareId"] ?? throw new ArgumentNullException("shareId");
         var nodeId = ctx.Request.Url.Parameters["nodeId"] ?? throw new ArgumentNullException("nodeId");
 
         var node = await _session.Value.ProtonDriveClient.GetNodeAsync(new(shareId), new(nodeId), ctx.Token);
 
+        var metadata = GetNodeMetadata(volumeId, shareId, node);
+
+        return metadata;
+    }
+
+    private static HttpModels.NodeMetadata GetNodeMetadata(string volumeId, string shareId, INode node)
+    {
         var metadata = new HttpModels.NodeMetadata
         {
+            NodeId = node.NodeIdentity.NodeId.Value,
             Name = node.Name,
             ParentId = node.ParentId?.Value,
             State = node.State.ToString(),
+            Url = $"/volumes/{volumeId}/shares/{shareId}/node-content/by-id/{node.NodeIdentity.NodeId.Value}",
         };
 
         if (node is FileNode fileNode)
@@ -172,6 +186,53 @@ public sealed class Program
         }
 
         return metadata;
+    }
+
+    private async Task<HttpModels.NodeChildren?> OnGetNodeContentByIdRequest(HttpContextBase ctx)
+    {
+        if (!_session.HasValue)
+        {
+            // TODO: Redirect to login
+            throw new InvalidOperationException("Session not initialized");
+        }
+
+        var volumeId = ctx.Request.Url.Parameters["volumeId"] ?? throw new ArgumentNullException("volumeId");
+        var shareId = ctx.Request.Url.Parameters["shareId"] ?? throw new ArgumentNullException("shareId");
+        var nodeId = ctx.Request.Url.Parameters["nodeId"] ?? throw new ArgumentNullException("nodeId");
+
+        var node = await _session.Value.ProtonDriveClient.GetNodeAsync(new(shareId), new(nodeId), ctx.Token);
+        var nodeIdentity = new NodeIdentity(new(shareId), new(volumeId), new(nodeId));
+
+        if (node is FileNode)
+        {
+            throw new NotImplementedException("file content not implemented");
+        }
+
+        var children = _session.Value.ProtonDriveClient
+            .GetFolderChildrenAsync(nodeIdentity, ctx.Token)
+            .Select(child => GetNodeMetadata(volumeId, shareId, child));
+
+        if (node.ParentId is not null)
+        {
+            var parentNode = new FolderNode
+            {
+                NodeIdentity = new()
+                {
+                    NodeId = node.ParentId,
+                },
+                Name = "(Parent Directory)",
+                State = NodeState.Active,
+            };
+            children = children.Prepend(GetNodeMetadata(volumeId, shareId, parentNode));
+        }
+
+        return new()
+        {
+            VolumeId = volumeId,
+            ShareId = shareId,
+            NodeId = nodeId,
+            Children = await children.ToArrayAsync(ctx.Token),
+        };
     }
 
     private async Task OnAuthenticateRequest(HttpContextBase ctx)
