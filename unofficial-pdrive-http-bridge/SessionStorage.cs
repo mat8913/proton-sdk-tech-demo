@@ -48,11 +48,11 @@ public sealed class SessionStorage
         await using var db = _persistenceManager.GetProgramDbContext();
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
-        var modelSession = await db.Sessions.FirstOrDefaultAsync();
+        var modelSession = await db.Sessions.SingleOrDefaultAsync(ct);
         if (modelSession is null)
             return null;
 
-        var scopes = await db.SessionScopes.Select(x => x.Scope).ToArrayAsync();
+        var scopes = await db.SessionScopes.Select(x => x.Scope).ToArrayAsync(ct);
 
         return new StoredSession(
             SessionId: modelSession.SessionId,

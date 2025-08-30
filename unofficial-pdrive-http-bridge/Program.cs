@@ -38,7 +38,7 @@ public sealed class Program
         var dataDir = Path.Join(appData, "unofficial-pdrive-http-bridge");
         var dbFile = Path.Join(dataDir, "data.db");
         Directory.CreateDirectory(dataDir);
-        PersistenceManager persistenceManager = new(dbFile);
+        PersistenceManager persistenceManager = new(loggerFactory, dbFile);
         SessionStorage sessionStorage = new(persistenceManager);
 
         var program = new Program(loggerFactory, persistenceManager, sessionStorage);

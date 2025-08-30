@@ -1,11 +1,14 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using unofficial_pdrive_http_bridge.DbModels;
 
 namespace unofficial_pdrive_http_bridge;
 
 public sealed class ProgramDbContext : DbContext
 {
+    private readonly ILoggerFactory? _loggerFactory;
+
     public DbSet<Session> Sessions { get; set; }
     public DbSet<SessionScope> SessionScopes { get; set; }
     public DbSet<SecretsCacheSecret> SecretsCacheSecrets { get; set; }
@@ -15,12 +18,13 @@ public sealed class ProgramDbContext : DbContext
 
     // For design-time
     public ProgramDbContext()
-    : this(":memory:")
+    : this(null, ":memory:")
     {
     }
 
-    public ProgramDbContext(string dbPath)
+    public ProgramDbContext(ILoggerFactory? loggerFactory, string dbPath)
     {
+        _loggerFactory = loggerFactory;
         DbPath = dbPath;
     }
 
@@ -31,6 +35,8 @@ public sealed class ProgramDbContext : DbContext
             DataSource = DbPath,
             Pooling = true,
         }.ToString();
-        options.UseSqlite(connectionString);
+        options
+            .UseSqlite(connectionString)
+            .UseLoggerFactory(_loggerFactory);
     }
 }
