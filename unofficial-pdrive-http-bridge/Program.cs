@@ -1,6 +1,6 @@
 ﻿using System;
 using System.IO;
-using System.Text;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -89,7 +89,7 @@ public sealed class Program
         server.Routes.PostAuthentication.Static.Add(
             HttpMethod.GET,
             "/volumes",
-            OnGetVolumesRequest);
+            ToHandler(OnGetVolumesRequest));
 
         server.Routes.PostAuthentication.Parameter.Add(
             HttpMethod.GET,
@@ -106,7 +106,7 @@ public sealed class Program
         await ctx.Response.Send("Not found.");
     }
 
-    private async Task OnGetVolumesRequest(HttpContextBase ctx)
+    private async Task<HttpModels.VolumeList?> OnGetVolumesRequest(HttpContextBase ctx)
     {
         if (!_session.HasValue)
         {
@@ -114,26 +114,22 @@ public sealed class Program
             throw new InvalidOperationException("Session not initialized");
         }
 
-        // TODO: Build HTML smarter
-        // TODO: Add JSON support
         var volumes = await _session.Value.ProtonDriveClient.GetVolumesAsync(ctx.Token);
-        ctx.Response.ContentType = "text/html";
-        var builder = new StringBuilder();
-        builder.Append("<table><tr><th>Id</th><th>RootShareId</th><th>State</th><th>MaxSpace</th></tr>");
-        foreach (var volume in volumes)
+        var modelVolumes = volumes
+            .Select(volume => new HttpModels.Volume
+            {
+                Id = volume.Id.Value,
+                RootShareId = volume.RootShareId.Value,
+                State = volume.State.ToString(),
+                MaxSpace = volume.MaxSpace,
+            })
+            .ToArray();
+        var modelVolumeList = new HttpModels.VolumeList
         {
-            builder.Append("<tr><td>");
-            builder.Append(volume.Id.Value);
-            builder.Append("</td><td>");
-            builder.Append(volume.RootShareId.Value);
-            builder.Append("</td><td>");
-            builder.Append(volume.State);
-            builder.Append("</td><td>");
-            builder.Append(volume.MaxSpace);
-            builder.Append("</td></tr>");
-        }
-        builder.Append("</table>");
-        await ctx.Response.Send(builder.ToString());
+            Volumes = modelVolumes,
+        };
+
+        return modelVolumeList;
     }
 
     private async Task<HttpModels.NodeMetadata?> OnGetNodeMetadataByIdRequest(HttpContextBase ctx)
