@@ -84,6 +84,8 @@ public sealed class Program
         settings.Debug.Responses = true;
         WebserverBase server = new WebserverLite(settings, OnDefaultRoute);
         server.Events.Logger = msg => webserverLogger.LogInformation("{msg}", msg);
+        server.Events.ExceptionEncountered += (_, ex) =>
+            webserverLogger.LogError(ex.Exception, "Exception handling {url}: {ex}", ex.Url, ex.Exception);
 
         server.Routes.AuthenticateRequest = OnAuthenticateRequest;
 
