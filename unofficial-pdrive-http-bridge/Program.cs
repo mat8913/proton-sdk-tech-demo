@@ -245,13 +245,16 @@ public sealed class Program
 
     private async Task OnAuthenticateRequest(HttpContextBase ctx)
     {
-        if (ctx.Request.Authorization.Password == "password")
+        // Set response timeout
+        var stream = Utils.GetResponseStream(ctx.Response);
+        stream.WriteTimeout = 5000;
+
+        if (ctx.Request.Authorization.Password != "password")
         {
-            return;
-        }
         ctx.Response.StatusCode = 401;
         ctx.Response.Headers["WWW-Authenticate"] = "Basic realm=\"User Visible Realm\", charset=\"UTF-8\"";
         await ctx.Response.Send();
+        }
     }
 
     private Func<HttpContextBase, Task> ToHandler<T>(Func<HttpContextBase, Task<T?>> func)
