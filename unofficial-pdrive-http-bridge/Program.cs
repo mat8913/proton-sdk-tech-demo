@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.IO.Pipelines;
 using System.Linq;
 using System.Net.Http.Headers;
 using System.Threading;
@@ -206,12 +207,19 @@ public sealed class Program
         if (node is FileNode fileNode)
         {
             using var downloader = await _session.Value.ProtonDriveClient.WaitForFileDownloaderAsync(ctx.Token);
-            await using var outputStream = new HttpResponseStream(ctx);
+            var pipe = new Pipe(new(
+                pauseWriterThreshold: RevisionWriter.DefaultBlockSize * 2,
+                resumeWriterThreshold: RevisionWriter.DefaultBlockSize));
+            await using var writerStream = pipe.Writer.AsStream();
+            await using var readerStream = pipe.Reader.AsStream();
 
             ctx.Response.StatusCode = 200;
-            ctx.Response.ChunkedTransfer = true;
-            await downloader.DownloadAsync(nodeIdentity, fileNode.ActiveRevision, outputStream, (_, _) => { }, ctx.Token);
-            await ctx.Response.SendChunk(Array.Empty<byte>(), true);
+            var downloadTask = Task.Run(() => downloader.DownloadAsync(nodeIdentity, fileNode.ActiveRevision, writerStream, (_, _) => { }, ctx.Token));
+            var senderTask = ctx.Response.Send(fileNode.ActiveRevision.Size, readerStream);
+            await foreach (var t in Task.WhenEach(downloadTask, senderTask))
+            {
+                await t;
+            }
 
             return null;
         }
@@ -251,9 +259,9 @@ public sealed class Program
 
         if (ctx.Request.Authorization.Password != "password")
         {
-        ctx.Response.StatusCode = 401;
-        ctx.Response.Headers["WWW-Authenticate"] = "Basic realm=\"User Visible Realm\", charset=\"UTF-8\"";
-        await ctx.Response.Send();
+            ctx.Response.StatusCode = 401;
+            ctx.Response.Headers["WWW-Authenticate"] = "Basic realm=\"User Visible Realm\", charset=\"UTF-8\"";
+            await ctx.Response.Send();
         }
     }
 
