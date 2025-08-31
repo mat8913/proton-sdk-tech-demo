@@ -61,7 +61,10 @@ public sealed class RevisionReader : IDisposable
                             if (downloadTasks.Count > 0)
                             {
                                 await WriteNextBlockAsync(downloadTasks, contentOutputStream, manifestStream, cancellationToken).ConfigureAwait(false);
-                                onProgress(contentOutputStream.Position, _revisionResponse.Revision.Size);
+                                if (contentOutputStream.CanSeek)
+                                {
+                                    onProgress(contentOutputStream.Position, _revisionResponse.Revision.Size);
+                                }
                             }
 
                             await _client.BlockDownloader.BlockSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
