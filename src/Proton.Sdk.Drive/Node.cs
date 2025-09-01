@@ -314,7 +314,8 @@ public class Node : INode
             name,
             ByteStringExtensions.FromMemory(link.NameHashDigest),
             state,
-            activeRevision);
+            activeRevision,
+            link.MediaType);
     }
 
     internal static async Task<ReadOnlyMemory<byte>> GetHashKeyAsync(

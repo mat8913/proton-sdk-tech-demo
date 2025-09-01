@@ -19,13 +19,15 @@ public sealed partial class FileNode : INode
         string name,
         ByteString nameHashDigest,
         NodeState state,
-        (RevisionDto Properties, ExtendedAttributes ExtendedAttributes)? activeRevision = null)
+        (RevisionDto Properties, ExtendedAttributes ExtendedAttributes)? activeRevision = null,
+        string? mediaType = null)
     {
         NodeIdentity = nodeIdentity;
         ParentId = parentId;
         Name = name;
         NameHashDigest = nameHashDigest;
         State = state;
+        MediaType = mediaType;
 
         if (activeRevision is not null)
         {
