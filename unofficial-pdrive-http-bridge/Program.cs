@@ -214,6 +214,7 @@ public sealed class Program
             await using var readerStream = pipe.Reader.AsStream();
 
             ctx.Response.StatusCode = 200;
+            ctx.Response.ContentType = fileNode.MediaType ?? "application/octet-stream";
             var downloadTask = Task.Run(() => downloader.DownloadAsync(nodeIdentity, fileNode.ActiveRevision, writerStream, (_, _) => { }, ctx.Token));
             var senderTask = ctx.Response.Send(fileNode.ActiveRevision.Size, readerStream);
             await foreach (var t in Task.WhenEach(downloadTask, senderTask))
