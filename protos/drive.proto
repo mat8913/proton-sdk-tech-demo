@@ -134,6 +134,8 @@ message Revision {
     optional int64 size = 8;
     int64 quota_consumption = 9;
     int64 creation_time = 10;
+
+    repeated int32 block_sizes = 11;
 }
 
 enum RevisionState {

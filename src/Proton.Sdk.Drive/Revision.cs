@@ -36,6 +36,10 @@ public sealed partial class Revision : IRevisionForTransfer
         Size = extendedAttributes.Common?.Size ?? 0;
         QuotaConsumption = size;
         SamplesSha256Digests.Add(previewImageSha256Digests);
+        if (extendedAttributes.Common is not null)
+        {
+            BlockSizes.AddRange(extendedAttributes.Common.BlockSizes);
+        }
     }
 
     public RevisionMetadata Metadata()
