@@ -7,4 +7,6 @@ internal sealed class CommonExtendedAttributes
     public DateTime? ModificationTime { get; init; }
 
     public IReadOnlyList<int>? BlockSizes { get; init; }
+
+    public IReadOnlyDictionary<string, string>? Digests { get; init; }
 }
