@@ -10,4 +10,5 @@ public interface IRevisionForTransfer
     ByteString? ManifestSignature { get; }
     string? SignatureEmailAddress { get; }
     RepeatedField<ByteString> SamplesSha256Digests { get; }
+    RepeatedField<int> BlockSizes { get; }
 }

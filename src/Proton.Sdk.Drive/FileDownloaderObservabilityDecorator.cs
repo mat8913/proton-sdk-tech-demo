@@ -20,11 +20,13 @@ public sealed class FileDownloaderObservabilityDecorator : IFileDownloader
         IRevisionForTransfer revision,
         Stream contentOutputStream,
         Action<long, long> onProgress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        long startPos = 0,
+        long? endPos = null)
     {
         try
         {
-            var verificationStatus = await _decoratedInstance.DownloadAsync(fileIdentity, revision, contentOutputStream, onProgress, cancellationToken)
+            var verificationStatus = await _decoratedInstance.DownloadAsync(fileIdentity, revision, contentOutputStream, onProgress, cancellationToken, startPos, endPos)
                 .ConfigureAwait(false);
 
             _attemptRetryMonitor.IncrementSuccess(fileIdentity.VolumeId, fileIdentity.NodeId);

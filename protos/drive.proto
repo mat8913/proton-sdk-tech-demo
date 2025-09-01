@@ -122,6 +122,7 @@ message RevisionMetadata {
     optional bytes manifest_signature = 3;
     optional string signature_email_address = 4;
     repeated bytes samples_sha256_digests = 5;
+    repeated int32 block_sizes = 6;
 }
 
 message Revision {
@@ -136,6 +137,8 @@ message Revision {
     optional int64 size = 8;
     int64 quota_consumption = 9;
     int64 creation_time = 10;
+
+    repeated int32 block_sizes = 11;
 }
 
 enum RevisionState {

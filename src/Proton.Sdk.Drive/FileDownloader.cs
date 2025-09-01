@@ -20,9 +20,11 @@ internal sealed class FileDownloader : IFileDownloader
         IRevisionForTransfer revision,
         Stream contentOutputStream,
         Action<long, long> onProgress,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        long startPos = 0,
+        long? endPos = null)
     {
-        using var revisionReader = await Revision.OpenForReadingAsync(_client, fileIdentity, revision, ReleaseBlockListing, cancellationToken)
+        using var revisionReader = await Revision.OpenForReadingAsync(_client, fileIdentity, revision, ReleaseBlockListing, cancellationToken, startPos, endPos)
             .ConfigureAwait(false);
 
         return await revisionReader.ReadAsync(contentOutputStream, onProgress, cancellationToken).ConfigureAwait(false);
@@ -53,7 +55,7 @@ internal sealed class FileDownloader : IFileDownloader
             revisionForTransfer = revisions.First();
         }
 
-        using var revisionReader = await Revision.OpenForReadingAsync(_client, fileIdentity, revisionForTransfer, ReleaseBlockListing, cancellationToken, operationId)
+        using var revisionReader = await Revision.OpenForReadingAsync(_client, fileIdentity, revisionForTransfer, ReleaseBlockListing, cancellationToken, 0, null, operationId)
             .ConfigureAwait(false);
 
         FileStream fileStream;

@@ -36,6 +36,10 @@ public sealed partial class Revision : IRevisionForTransfer
         Size = extendedAttributes.Common?.Size ?? 0;
         QuotaConsumption = size;
         SamplesSha256Digests.Add(previewImageSha256Digests);
+        if (extendedAttributes.Common is not null)
+        {
+            BlockSizes.AddRange(extendedAttributes.Common.BlockSizes);
+        }
     }
 
     public RevisionMetadata Metadata()
@@ -49,6 +53,7 @@ public sealed partial class Revision : IRevisionForTransfer
         };
 
         revisionMetadata.SamplesSha256Digests.Add(SamplesSha256Digests);
+        revisionMetadata.BlockSizes.Add(BlockSizes);
         return revisionMetadata;
     }
 
@@ -93,6 +98,8 @@ public sealed partial class Revision : IRevisionForTransfer
         IRevisionForTransfer revisionMetadata,
         Action<int> releaseBlockListingAction,
         CancellationToken cancellationToken,
+        long startPos = 0,
+        long? endPos = null,
         byte[]? operationId = null)
     {
         if (revisionMetadata.State is RevisionState.Draft)
@@ -103,17 +110,24 @@ public sealed partial class Revision : IRevisionForTransfer
         var contentKey = await FileNode.GetContentKeyAsync(client, fileIdentity, cancellationToken).ConfigureAwait(false);
         var fileKey = await Node.GetKeyAsync(client, fileIdentity, cancellationToken).ConfigureAwait(false);
 
+        var startBlockIndex = BlockUtils.GetBlockIndexFromFileIndex(revisionMetadata.BlockSizes, startPos);
+        BlockIndex? endBlockIndex = null;
+        if (endPos.HasValue)
+        {
+            endBlockIndex = BlockUtils.GetBlockIndexFromFileIndex(revisionMetadata.BlockSizes, endPos.Value);
+        }
+
         var revisionResponse = await client.FilesApi.GetRevisionAsync(
             fileIdentity.ShareId,
             fileIdentity.NodeId,
             revisionMetadata.RevisionId,
-            RevisionReader.MinBlockIndex,
+            RevisionReader.MinBlockIndex + startBlockIndex.BlockNumber,
             RevisionReader.BlockPageSize,
             false,
             cancellationToken,
             operationId).ConfigureAwait(false);
 
-        return new RevisionReader(client, fileIdentity, revisionMetadata, fileKey, contentKey, revisionResponse, releaseBlockListingAction);
+        return new RevisionReader(client, fileIdentity, revisionMetadata, fileKey, contentKey, revisionResponse, startBlockIndex, endBlockIndex, releaseBlockListingAction);
     }
 
     internal static async Task<RevisionWriter> OpenForWritingAsync(

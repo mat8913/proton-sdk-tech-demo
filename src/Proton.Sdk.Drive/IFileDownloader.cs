@@ -7,7 +7,9 @@ public interface IFileDownloader : IDisposable
         IRevisionForTransfer revision,
         Stream contentOutputStream,
         Action<long, long> onProgress,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        long startPos = 0,
+        long? endPos = null);
 
     public Task<VerificationStatus> DownloadAsync(
         INodeIdentity fileIdentity,
