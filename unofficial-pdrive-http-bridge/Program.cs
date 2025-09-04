@@ -33,7 +33,9 @@ public sealed class Program
     {
         var ct = CancellationToken.None;
 
-        using var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+        using var loggerFactory = LoggerFactory.Create(builder => builder
+            .AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning)
+            .AddConsole());
 
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.Create);
         var dataDir = Path.Join(appData, "unofficial-pdrive-http-bridge");
