@@ -21,6 +21,7 @@ public sealed class Program
     private readonly PersistenceManager _persistenceManager;
     private readonly SessionStorage _sessionStorage;
     private Session? _session;
+    private int _connectionCount;
 
     public Program(ILoggerFactory loggerFactory, PersistenceManager persistenceManager, SessionStorage sessionStorage)
     {
@@ -273,25 +274,35 @@ public sealed class Program
     {
         return async ctx =>
         {
-            var model = await func(ctx);
-            if (model is not null)
+            var numConnections = Interlocked.Increment(ref _connectionCount);
+            Console.WriteLine($"Connections: {numConnections}");
+            try
             {
-                // TODO: match wildcards
-                var accepts = ctx.Request.Headers["Accept"]?.Split(',')
-                    .Select(MediaTypeWithQualityHeaderValue.Parse)
-                    .OrderByDescending(mt => mt.Quality.GetValueOrDefault(1))
-                    .FirstOrDefault(mt => mt.MediaType == "application/json" || mt.MediaType == "text/html");
+                var model = await func(ctx);
+                if (model is not null)
+                {
+                    // TODO: match wildcards
+                    var accepts = ctx.Request.Headers["Accept"]?.Split(',')
+                        .Select(MediaTypeWithQualityHeaderValue.Parse)
+                        .OrderByDescending(mt => mt.Quality.GetValueOrDefault(1))
+                        .FirstOrDefault(mt => mt.MediaType == "application/json" || mt.MediaType == "text/html");
 
-                if (accepts is null || accepts.MediaType == "application/json")
-                {
-                    ctx.Response.ContentType = "application/json";
-                    await ctx.Response.Send(model.ToJson());
+                    if (accepts is null || accepts.MediaType == "application/json")
+                    {
+                        ctx.Response.ContentType = "application/json";
+                        await ctx.Response.Send(model.ToJson());
+                    }
+                    else
+                    {
+                        ctx.Response.ContentType = "text/html";
+                        await ctx.Response.Send(model.ToHtml());
+                    }
                 }
-                else
-                {
-                    ctx.Response.ContentType = "text/html";
-                    await ctx.Response.Send(model.ToHtml());
-                }
+            }
+            finally
+            {
+                numConnections = Interlocked.Decrement(ref _connectionCount);
+                Console.WriteLine($"Connections: {numConnections}");
             }
         };
     }
