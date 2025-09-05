@@ -6,6 +6,8 @@ using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Proton.Sdk;
 using Proton.Sdk.Drive;
@@ -14,12 +16,13 @@ using WatsonWebserver.Lite;
 
 namespace unofficial_pdrive_http_bridge;
 
-public sealed class Program
+public sealed class Program : IHostedService, IDisposable
 {
     private const string APP_NAME = "macos-drive@1.0.0-alpha.1+rclone";
     private readonly ILoggerFactory _loggerFactory;
     private readonly PersistenceManager _persistenceManager;
     private readonly SessionStorage _sessionStorage;
+    private WebserverLite? _webserver;
     private Session? _session;
     private int _connectionCount;
 
@@ -30,27 +33,38 @@ public sealed class Program
         _sessionStorage = sessionStorage;
     }
 
-    public static async Task<int> Main(string[] argv)
+    public static async Task Main(string[] argv)
     {
-        var ct = CancellationToken.None;
+        var hostSettings = new HostApplicationBuilderSettings
+        {
+            Args = argv,
+        };
 
-        using var loggerFactory = LoggerFactory.Create(builder => builder
+        var hostBuilder = Host.CreateApplicationBuilder(hostSettings);
+
+        // Logging
+        hostBuilder.Logging
             .AddFilter("Microsoft.EntityFrameworkCore.Database.Command", LogLevel.Warning)
-            .AddConsole());
+            .AddConsole();
 
+        // PersistenceManager
         var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData, Environment.SpecialFolderOption.Create);
         var dataDir = Path.Join(appData, "unofficial-pdrive-http-bridge");
         var dbFile = Path.Join(dataDir, "data.db");
         Directory.CreateDirectory(dataDir);
-        PersistenceManager persistenceManager = new(loggerFactory, dbFile);
-        SessionStorage sessionStorage = new(persistenceManager);
+        hostBuilder.Services
+            .AddSingleton<PersistenceManager>(s => new(s.GetRequiredService<ILoggerFactory>(), dbFile));
 
-        var program = new Program(loggerFactory, persistenceManager, sessionStorage);
-        var retcode = await program.Run(argv, ct);
-        return retcode;
+        hostBuilder.Services
+            .AddSingleton<SessionStorage>()
+            .AddHostedService<Program>();
+
+        using var host = hostBuilder.Build();
+
+        await host.RunAsync();
     }
 
-    public async Task<int> Run(string[] argv, CancellationToken ct)
+    public async Task StartAsync(CancellationToken ct)
     {
         await using (var db = _persistenceManager.GetProgramDbContext())
         {
@@ -86,30 +100,42 @@ public sealed class Program
         WebserverSettings settings = new WebserverSettings("127.0.0.1", 9000);
         settings.Debug.Requests = true;
         settings.Debug.Responses = true;
-        WebserverBase server = new WebserverLite(settings, OnDefaultRoute);
-        server.Events.Logger = msg => webserverLogger.LogInformation("{msg}", msg);
-        server.Events.ExceptionEncountered += (_, ex) =>
+        _webserver = new WebserverLite(settings, OnDefaultRoute);
+        _webserver.Events.Logger = msg => webserverLogger.LogInformation("{msg}", msg);
+        _webserver.Events.ExceptionEncountered += (_, ex) =>
             webserverLogger.LogError(ex.Exception, "Exception handling {url}: {ex}", ex.Url, ex.Exception);
 
-        server.Routes.AuthenticateRequest = OnAuthenticateRequest;
+        _webserver.Routes.AuthenticateRequest = OnAuthenticateRequest;
 
-        server.Routes.PostAuthentication.Static.Add(
+        _webserver.Routes.PostAuthentication.Static.Add(
             HttpMethod.GET,
             "/volumes",
             ToHandler(OnGetVolumesRequest));
 
-        server.Routes.PostAuthentication.Parameter.Add(
+        _webserver.Routes.PostAuthentication.Parameter.Add(
             HttpMethod.GET,
             "/volumes/{volumeId}/shares/{shareId}/node-metadata/by-id/{nodeId}",
             ToHandler(OnGetNodeMetadataByIdRequest));
 
-        server.Routes.PostAuthentication.Parameter.Add(
+        _webserver.Routes.PostAuthentication.Parameter.Add(
             HttpMethod.GET,
             "/volumes/{volumeId}/shares/{shareId}/node-content/by-id/{nodeId}",
             ToHandler(OnGetNodeContentByIdRequest));
 
-        await server.StartAsync(ct);
-        return 0;
+        _webserver.Start(ct);
+        Console.WriteLine("Server started");
+    }
+
+    public Task StopAsync(CancellationToken ct)
+    {
+        _webserver?.Stop();
+        Console.WriteLine("Server stopped");
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        _webserver?.Dispose();
     }
 
     private async Task OnDefaultRoute(HttpContextBase ctx)
