@@ -70,7 +70,7 @@ public sealed class RevisionReader : IDisposable
                             await _client.BlockDownloader.BlockSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
                         }
 
-                        var downloadTask = DownloadBlockAsync(block, contentOutputStream, cancellationToken);
+                        var downloadTask = DownloadBlockAsync(block, cancellationToken);
 
                         downloadTasks.Enqueue(downloadTask);
                     }
@@ -137,11 +137,6 @@ public sealed class RevisionReader : IDisposable
 
             manifestStream.Write(downloadResult.Sha256Digest.Span);
 
-            if (!downloadResult.IsIntermediateStream)
-            {
-                return;
-            }
-
             var downloadedStream = downloadResult.Stream;
 
             await using (downloadResult.Stream.ConfigureAwait(false))
@@ -157,21 +152,9 @@ public sealed class RevisionReader : IDisposable
         }
     }
 
-    private async Task<BlockDownloadResult> DownloadBlockAsync(Block block, Stream contentOutputStream, CancellationToken cancellationToken)
+    private async Task<BlockDownloadResult> DownloadBlockAsync(Block block, CancellationToken cancellationToken)
     {
-        Stream blockOutputStream;
-        bool isIntermediateStream;
-
-        if (block.Index == 1)
-        {
-            blockOutputStream = contentOutputStream;
-            isIntermediateStream = false;
-        }
-        else
-        {
-            blockOutputStream = ProtonDriveClient.MemoryStreamManager.GetStream();
-            isIntermediateStream = true;
-        }
+        var blockOutputStream = ProtonDriveClient.MemoryStreamManager.GetStream();
 
         var signatureVerificationKeyRing = !string.IsNullOrEmpty(block.SignatureEmailAddress)
             ? new PgpKeyRing(await _client.Account.GetAddressPublicKeysAsync(block.SignatureEmailAddress, cancellationToken).ConfigureAwait(false))
@@ -186,7 +169,7 @@ public sealed class RevisionReader : IDisposable
             blockOutputStream,
             cancellationToken).ConfigureAwait(false);
 
-        return new BlockDownloadResult(block.Index, blockOutputStream, isIntermediateStream, hashDigest, verificationStatus);
+        return new BlockDownloadResult(block.Index, blockOutputStream, hashDigest, verificationStatus);
     }
 
     private async IAsyncEnumerable<(Block Value, bool IsLast)> GetBlocksAsync(RevisionResponse revisionResponse, [EnumeratorCancellation] CancellationToken cancellationToken)
@@ -290,13 +273,11 @@ public sealed class RevisionReader : IDisposable
     private readonly struct BlockDownloadResult(
         int index,
         Stream stream,
-        bool isIntermediateStream,
         ReadOnlyMemory<byte> sha256Digest,
         PgpVerificationStatus verificationStatus)
     {
         public int Index { get; } = index;
         public Stream Stream { get; } = stream;
-        public bool IsIntermediateStream { get; } = isIntermediateStream;
         public ReadOnlyMemory<byte> Sha256Digest { get; } = sha256Digest;
         public PgpVerificationStatus VerificationStatus { get; } = verificationStatus;
     }
