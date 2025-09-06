@@ -120,6 +120,7 @@ message RevisionMetadata {
     optional bytes manifest_signature = 3;
     optional string signature_email_address = 4;
     repeated bytes samples_sha256_digests = 5;
+    repeated int32 block_sizes = 6;
 }
 
 message Revision {

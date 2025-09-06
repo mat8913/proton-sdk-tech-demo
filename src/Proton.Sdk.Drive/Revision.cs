@@ -53,6 +53,7 @@ public sealed partial class Revision : IRevisionForTransfer
         };
 
         revisionMetadata.SamplesSha256Digests.Add(SamplesSha256Digests);
+        revisionMetadata.BlockSizes.Add(BlockSizes);
         return revisionMetadata;
     }
 
