@@ -6,9 +6,12 @@ using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.EnvironmentVariables;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Proton.Sdk;
 using Proton.Sdk.Drive;
 using WatsonWebserver.Core;
@@ -20,15 +23,17 @@ public sealed class Program : IHostedService, IDisposable
 {
     private const string APP_NAME = "macos-drive@1.0.0-alpha.1+rclone";
     private readonly ILoggerFactory _loggerFactory;
+    private readonly IOptions<Settings> _settings;
     private readonly PersistenceManager _persistenceManager;
     private readonly SessionStorage _sessionStorage;
     private WebserverLite? _webserver;
     private Session? _session;
     private int _connectionCount;
 
-    public Program(ILoggerFactory loggerFactory, PersistenceManager persistenceManager, SessionStorage sessionStorage)
+    public Program(ILoggerFactory loggerFactory, IOptions<Settings> settings, PersistenceManager persistenceManager, SessionStorage sessionStorage)
     {
         _loggerFactory = loggerFactory;
+        _settings = settings;
         _persistenceManager = persistenceManager;
         _sessionStorage = sessionStorage;
     }
@@ -41,6 +46,11 @@ public sealed class Program : IHostedService, IDisposable
         };
 
         var hostBuilder = Host.CreateApplicationBuilder(hostSettings);
+
+        // Configuration
+        hostBuilder.Configuration.Sources.RemoveAll(x =>
+            x is EnvironmentVariablesConfigurationSource envSource && envSource.Prefix is null);
+        hostBuilder.Configuration.AddEnvironmentVariables("PDRIVE_");
 
         // Logging
         hostBuilder.Logging
@@ -55,11 +65,20 @@ public sealed class Program : IHostedService, IDisposable
         hostBuilder.Services
             .AddSingleton<PersistenceManager>(s => new(s.GetRequiredService<ILoggerFactory>(), dbFile));
 
+        // IOptions<Settings>
+        hostBuilder.Services
+            .AddOptions()
+            .AddSingleton<IOptionsChangeTokenSource<Settings>>(s => new ConfigurationChangeTokenSource<Settings>(null, s.GetRequiredService<IConfiguration>()))
+            .AddSingleton<IConfigureOptions<Settings>>(s => new NamedConfigureFromConfigurationOptions<Settings>(null, s.GetRequiredService<IConfiguration>(), null));
+
         hostBuilder.Services
             .AddSingleton<SessionStorage>()
             .AddHostedService<Program>();
 
         using var host = hostBuilder.Build();
+
+        var settings = host.Services.GetRequiredService<IOptions<Settings>>();
+        var config = host.Services.GetRequiredService<IConfiguration>();
 
         await host.RunAsync();
     }
@@ -97,7 +116,7 @@ public sealed class Program : IHostedService, IDisposable
         */
 
         var webserverLogger = _loggerFactory.CreateLogger<WebserverLite>();
-        WebserverSettings settings = new WebserverSettings("127.0.0.1", 9000);
+        WebserverSettings settings = new WebserverSettings(_settings.Value.Hostname ?? "127.0.0.1", _settings.Value.Port ?? 9000);
         settings.Debug.Requests = true;
         settings.Debug.Responses = true;
         _webserver = new WebserverLite(settings, OnDefaultRoute);
@@ -123,7 +142,7 @@ public sealed class Program : IHostedService, IDisposable
             ToHandler(OnGetNodeContentByIdRequest));
 
         _webserver.Start(ct);
-        Console.WriteLine("Server started");
+        Console.WriteLine($"Server started on {settings.Hostname}:{settings.Port}");
     }
 
     public Task StopAsync(CancellationToken ct)
