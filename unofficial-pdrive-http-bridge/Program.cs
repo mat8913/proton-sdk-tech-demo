@@ -261,10 +261,32 @@ public sealed class Program : IHostedService, IDisposable
             await using var writerStream = pipe.Writer.AsStream();
             await using var readerStream = pipe.Reader.AsStream();
 
-            ctx.Response.StatusCode = 200;
+            long totalSize = fileNode.ActiveRevision.Size;
+            long startPos = 0;
+            if (RangeHeaderValue.TryParse(ctx.Request.Headers["Range"], out var range))
+            {
+                if (range.Ranges.Count > 1)
+                {
+                    throw new NotImplementedException("multi range not implemented");
+                }
+                startPos = range.Ranges.FirstOrDefault()?.From ?? startPos;
+            }
+            long endPos = long.Max(totalSize - 1, 0);
+            long contentSize = long.Max(totalSize - startPos, 0);
+
+            if (startPos == 0)
+            {
+                ctx.Response.StatusCode = 200;
+            }
+            else
+            {
+                ctx.Response.StatusCode = 206;
+                ctx.Response.Headers["Content-Range"] = $"bytes {startPos}-{endPos}/{totalSize}";
+            }
+            ctx.Response.Headers["Accept-Ranges"] = "bytes";
             ctx.Response.ContentType = fileNode.MediaType ?? "application/octet-stream";
-            var downloadTask = Task.Run(() => downloader.DownloadAsync(nodeIdentity, fileNode.ActiveRevision, writerStream, (_, _) => { }, ctx.Token));
-            var senderTask = ctx.Response.Send(fileNode.ActiveRevision.Size, readerStream);
+            var downloadTask = Task.Run(() => downloader.DownloadAsync(nodeIdentity, fileNode.ActiveRevision, writerStream, (_, _) => { }, ctx.Token, startPos));
+            var senderTask = ctx.Response.Send(contentSize, readerStream);
             await foreach (var t in Task.WhenEach(downloadTask, senderTask))
             {
                 await t;
