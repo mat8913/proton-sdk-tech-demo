@@ -205,6 +205,31 @@
     "hash": "sha256-N8WMvnbCKsUtpK08B1CYi5LOuq6Sbv3Nois4CKjDQJ8="
   },
   {
+    "pname": "Microsoft.Extensions.Configuration.CommandLine",
+    "version": "9.0.8",
+    "hash": "sha256-U8YasTaEsniloNaSPvlcXmGPfgTzjP8RvCfnLVx1onE="
+  },
+  {
+    "pname": "Microsoft.Extensions.Configuration.EnvironmentVariables",
+    "version": "9.0.8",
+    "hash": "sha256-g3FgfS11nS02dwDnpjpiD+r7nyUZ2eifGl8r2rfwanY="
+  },
+  {
+    "pname": "Microsoft.Extensions.Configuration.FileExtensions",
+    "version": "9.0.8",
+    "hash": "sha256-W7PnvqPcdJnJIPaEh1qRDh/WCVSz/KQy+GAMhMNhKE4="
+  },
+  {
+    "pname": "Microsoft.Extensions.Configuration.Json",
+    "version": "9.0.8",
+    "hash": "sha256-/QFT/SksJcsZ2Cjw0WkJzLnp+mT2m+38avEOgttrAaM="
+  },
+  {
+    "pname": "Microsoft.Extensions.Configuration.UserSecrets",
+    "version": "9.0.8",
+    "hash": "sha256-QcSfPQku3Hh5UIvuR3r3JYFDo2DFIZOx/i0/JmtOPWE="
+  },
+  {
     "pname": "Microsoft.Extensions.DependencyInjection",
     "version": "9.0.0",
     "hash": "sha256-dAH52PPlTLn7X+1aI/7npdrDzMEFPMXRv4isV1a+14k="
@@ -240,9 +265,19 @@
     "hash": "sha256-JMbhtjdcWRlrcrbgPlowfj26+pM+MYhnPIaYKnv9byU="
   },
   {
+    "pname": "Microsoft.Extensions.Diagnostics",
+    "version": "9.0.8",
+    "hash": "sha256-jV71HdeEU/T60f5qr2ND5GY6/Qk4iPiMUbnjEq8S6Qo="
+  },
+  {
     "pname": "Microsoft.Extensions.Diagnostics.Abstractions",
     "version": "9.0.0",
     "hash": "sha256-wG1LcET+MPRjUdz3HIOTHVEnbG/INFJUqzPErCM79eY="
+  },
+  {
+    "pname": "Microsoft.Extensions.Diagnostics.Abstractions",
+    "version": "9.0.8",
+    "hash": "sha256-nsgRtkUUC5q+Wc76lu3xxRgOT0dw+EXGa4pFCeI0iEo="
   },
   {
     "pname": "Microsoft.Extensions.Diagnostics.ExceptionSummarization",
@@ -255,9 +290,34 @@
     "hash": "sha256-mVfLjZ8VrnOQR/uQjv74P2uEG+rgW72jfiGdSZhIfDc="
   },
   {
+    "pname": "Microsoft.Extensions.FileProviders.Abstractions",
+    "version": "9.0.8",
+    "hash": "sha256-9X3roHvoAFzlTwVSlkbksB9EosKjVHeXuR5Jm682Wvk="
+  },
+  {
+    "pname": "Microsoft.Extensions.FileProviders.Physical",
+    "version": "9.0.8",
+    "hash": "sha256-lVnOgpxjO5VaCgviGeQ0R8kAIiDN1nKqpbj8CrCDpic="
+  },
+  {
+    "pname": "Microsoft.Extensions.FileSystemGlobbing",
+    "version": "9.0.8",
+    "hash": "sha256-1dmTABLD1Zo2vdZFsASTx8T8MRI8emN//KuNP3OiWKw="
+  },
+  {
+    "pname": "Microsoft.Extensions.Hosting",
+    "version": "9.0.8",
+    "hash": "sha256-0tnVesvcSrqvLarEVEf0kqJXdveLQCY7rCLis8b206Q="
+  },
+  {
     "pname": "Microsoft.Extensions.Hosting.Abstractions",
     "version": "9.0.0",
     "hash": "sha256-NhEDqZGnwCDFyK/NKn1dwLQExYE82j1YVFcrhXVczqY="
+  },
+  {
+    "pname": "Microsoft.Extensions.Hosting.Abstractions",
+    "version": "9.0.8",
+    "hash": "sha256-N1XwGfMh2a9grBfObp9md7YPSm7rlNZO5NG8OmHn8W4="
   },
   {
     "pname": "Microsoft.Extensions.Http",
@@ -313,6 +373,21 @@
     "pname": "Microsoft.Extensions.Logging.Console",
     "version": "9.0.8",
     "hash": "sha256-8cz7l8ubkRIBd6gwDJcpJd66MYNU0LsvDH9+PU+mTJo="
+  },
+  {
+    "pname": "Microsoft.Extensions.Logging.Debug",
+    "version": "9.0.8",
+    "hash": "sha256-IPMzdLmY/l0IP25DTQ13qdA/wwX0V3wq+sTHp8bX0UM="
+  },
+  {
+    "pname": "Microsoft.Extensions.Logging.EventLog",
+    "version": "9.0.8",
+    "hash": "sha256-W/yr3lXCwbtY5DTq50q5vM4Jeibj8j//xZF2qa6lgcc="
+  },
+  {
+    "pname": "Microsoft.Extensions.Logging.EventSource",
+    "version": "9.0.8",
+    "hash": "sha256-AFjHG4fiHgbJbgcr6u0/M83vf0XtdoeA5ZGSrIV31Co="
   },
   {
     "pname": "Microsoft.Extensions.ObjectPool",
@@ -483,6 +558,11 @@
     "pname": "System.Composition.TypedParts",
     "version": "7.0.0",
     "hash": "sha256-6ZzNdk35qQG3ttiAi4OXrihla7LVP+y2fL3bx40/32s="
+  },
+  {
+    "pname": "System.Diagnostics.EventLog",
+    "version": "9.0.8",
+    "hash": "sha256-u10dcgug0Pwp83YNagVto8Pu3ieuByflYLNwAdX9Fm0="
   },
   {
     "pname": "System.IO.Pipelines",
