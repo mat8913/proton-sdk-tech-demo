@@ -16,6 +16,7 @@ public sealed class RevisionReader : IDisposable
     private readonly PgpPrivateKey _fileKey;
     private readonly PgpSessionKey _contentKey;
     private readonly RevisionResponse _revisionResponse;
+    private readonly (int BlockNumber, int BlockIndex) _startBlockIndex;
     private readonly Action<int> _releaseBlockListingAction;
 
     private bool _semaphoreReleased;
@@ -27,6 +28,7 @@ public sealed class RevisionReader : IDisposable
         PgpPrivateKey fileKey,
         PgpSessionKey contentKey,
         RevisionResponse revisionResponse,
+        (int BlockNumber, int BlockIndex) startBlockIndex,
         Action<int> releaseBlockListingAction)
     {
         _client = client;
@@ -35,6 +37,7 @@ public sealed class RevisionReader : IDisposable
         _fileKey = fileKey;
         _contentKey = contentKey;
         _revisionResponse = revisionResponse;
+        _startBlockIndex = startBlockIndex;
         _releaseBlockListingAction = releaseBlockListingAction;
     }
 
@@ -141,7 +144,14 @@ public sealed class RevisionReader : IDisposable
 
             await using (downloadResult.Stream.ConfigureAwait(false))
             {
-                downloadedStream.Seek(0, SeekOrigin.Begin);
+                if (downloadResult.Index == MinBlockIndex + _startBlockIndex.BlockNumber)
+                {
+                    downloadedStream.Seek(_startBlockIndex.BlockIndex, SeekOrigin.Begin);
+                }
+                else
+                {
+                    downloadedStream.Seek(0, SeekOrigin.Begin);
+                }
 
                 await downloadedStream.CopyToAsync(outputStream, cancellationToken).ConfigureAwait(false);
             }
@@ -177,7 +187,7 @@ public sealed class RevisionReader : IDisposable
         try
         {
             var mustTryNextPageOfBlocks = true;
-            var nextExpectedIndex = 1;
+            var nextExpectedIndex = MinBlockIndex + _startBlockIndex.BlockNumber;
             var outstandingBlock = default(Block);
             var currentPageBlocks = new List<Block>(BlockPageSize);
 
