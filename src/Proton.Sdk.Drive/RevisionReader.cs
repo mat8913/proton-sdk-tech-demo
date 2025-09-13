@@ -9,6 +9,7 @@ public sealed class RevisionReader : IDisposable
 {
     public const int BlockPageSize = 10;
     public const int MinBlockIndex = 1;
+    private const int _maxParallelism = 4;
 
     private readonly ProtonDriveClient _client;
     private readonly INodeIdentity _fileIdentity;
@@ -18,7 +19,7 @@ public sealed class RevisionReader : IDisposable
     private readonly RevisionResponse _revisionResponse;
     private readonly Action<int> _releaseBlockListingAction;
 
-    private bool _semaphoreReleased;
+    private readonly SemaphoreSlim _blockSemaphore = new(_maxParallelism, _maxParallelism);
 
     internal RevisionReader(
         ProtonDriveClient client,
@@ -40,7 +41,7 @@ public sealed class RevisionReader : IDisposable
 
     public async Task<VerificationStatus> ReadAsync(Stream contentOutputStream, Action<long, long> onProgress, CancellationToken cancellationToken)
     {
-        var downloadTasks = new Queue<Task<BlockDownloadResult>>(_client.BlockDownloader.MaxDegreeOfParallelism);
+        var downloadTasks = new Queue<Task<BlockDownloadResult>>(_maxParallelism);
         var manifestStream = ProtonDriveClient.MemoryStreamManager.GetStream();
 
         await using (manifestStream)
@@ -52,33 +53,25 @@ public sealed class RevisionReader : IDisposable
 
             try
             {
-                try
+                await foreach (var (block, _) in GetBlocksAsync(_revisionResponse, cancellationToken).ConfigureAwait(false))
                 {
-                    await foreach (var (block, _) in GetBlocksAsync(_revisionResponse, cancellationToken).ConfigureAwait(false))
+                    if (!await _blockSemaphore.WaitAsync(0, cancellationToken).ConfigureAwait(false))
                     {
-                        if (!await _client.BlockDownloader.BlockSemaphore.WaitAsync(0, cancellationToken).ConfigureAwait(false))
+                        if (downloadTasks.Count > 0)
                         {
-                            if (downloadTasks.Count > 0)
+                            await WriteNextBlockAsync(downloadTasks, contentOutputStream, manifestStream, cancellationToken).ConfigureAwait(false);
+                            if (contentOutputStream.CanSeek)
                             {
-                                await WriteNextBlockAsync(downloadTasks, contentOutputStream, manifestStream, cancellationToken).ConfigureAwait(false);
-                                if (contentOutputStream.CanSeek)
-                                {
-                                    onProgress(contentOutputStream.Position, _revisionResponse.Revision.Size);
-                                }
+                                onProgress(contentOutputStream.Position, _revisionResponse.Revision.Size);
                             }
-
-                            await _client.BlockDownloader.BlockSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
                         }
 
-                        var downloadTask = DownloadBlockAsync(block, cancellationToken);
-
-                        downloadTasks.Enqueue(downloadTask);
+                        await _blockSemaphore.WaitAsync(cancellationToken).ConfigureAwait(false);
                     }
-                }
-                finally
-                {
-                    _client.BlockDownloader.FileSemaphore.Release();
-                    _semaphoreReleased = true;
+
+                    var downloadTask = DownloadBlockAsync(block, cancellationToken);
+
+                    downloadTasks.Enqueue(downloadTask);
                 }
 
                 while (downloadTasks.Count > 0)
@@ -94,7 +87,7 @@ public sealed class RevisionReader : IDisposable
                 }
                 finally
                 {
-                    _client.BlockDownloader.BlockSemaphore.Release(downloadTasks.Count);
+                    _blockSemaphore.Release(downloadTasks.Count);
                 }
 
                 throw;
@@ -107,10 +100,6 @@ public sealed class RevisionReader : IDisposable
 
     public void Dispose()
     {
-        if (!_semaphoreReleased)
-        {
-            _client.BlockDownloader.FileSemaphore.Release();
-        }
     }
 
     private async Task WriteNextBlockAsync(
@@ -148,7 +137,7 @@ public sealed class RevisionReader : IDisposable
         }
         finally
         {
-            _client.BlockDownloader.BlockSemaphore.Release();
+            _blockSemaphore.Release();
         }
     }
 
