@@ -10,14 +10,7 @@ internal sealed class BlockDownloader
     internal BlockDownloader(ProtonDriveClient client, int maxDegreeOfParallelism)
     {
         _client = client;
-        MaxDegreeOfParallelism = maxDegreeOfParallelism;
-        BlockSemaphore = new SemaphoreSlim(maxDegreeOfParallelism, maxDegreeOfParallelism);
     }
-
-    public int MaxDegreeOfParallelism { get; }
-
-    public SemaphoreSlim FileSemaphore { get; } = new(1, 1);
-    public SemaphoreSlim BlockSemaphore { get; }
 
     public async Task<(ReadOnlyMemory<byte> HashDigest, PgpVerificationStatus VerificationStatus)> DownloadAsync(
         string url,
