@@ -98,7 +98,7 @@ public sealed class Program : IHostedService, IDisposable
 
         await EnsurePassword(ct);
 
-        var apiSession = await ResumeSession(_persistenceManager, _sessionStorage, false, ct);
+        var apiSession = await ResumeSession(_persistenceManager, _sessionStorage, true, ct);
         var client = new ProtonDriveClient(apiSession);
         _session = new(apiSession, client);
 
@@ -426,7 +426,7 @@ public sealed class Program : IHostedService, IDisposable
         };
         if (enableSdkLog)
         {
-            options.LoggerFactory = _loggerFactory;
+            options.LoggerFactory = new WarnLoggerFactory(_loggerFactory);
         }
 
         var sessionResumeRequest = new SessionResumeRequest
