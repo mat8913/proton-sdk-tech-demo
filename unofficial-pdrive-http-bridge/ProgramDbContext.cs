@@ -13,6 +13,7 @@ public sealed class ProgramDbContext : DbContext
     public DbSet<SessionScope> SessionScopes { get; set; }
     public DbSet<SecretsCacheSecret> SecretsCacheSecrets { get; set; }
     public DbSet<SecretsCacheGroup> SecretsCacheGroups { get; set; }
+    public DbSet<WebUiPassword> WebUiPasswords { get; set; }
 
     public string DbPath { get; }
 

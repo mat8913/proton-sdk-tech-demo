@@ -3,6 +3,8 @@ using System.IO;
 using System.IO.Pipelines;
 using System.Linq;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -26,16 +28,18 @@ public sealed class Program : IHostedService, IDisposable
     private readonly IOptions<Settings> _settings;
     private readonly PersistenceManager _persistenceManager;
     private readonly SessionStorage _sessionStorage;
+    private readonly WebUiPasswordStorage _webUiPasswordStorage;
     private WebserverLite? _webserver;
     private Session? _session;
     private int _connectionCount;
 
-    public Program(ILoggerFactory loggerFactory, IOptions<Settings> settings, PersistenceManager persistenceManager, SessionStorage sessionStorage)
+    public Program(ILoggerFactory loggerFactory, IOptions<Settings> settings, PersistenceManager persistenceManager, SessionStorage sessionStorage, WebUiPasswordStorage webUiPasswordStorage)
     {
         _loggerFactory = loggerFactory;
         _settings = settings;
         _persistenceManager = persistenceManager;
         _sessionStorage = sessionStorage;
+        _webUiPasswordStorage = webUiPasswordStorage;
     }
 
     public static async Task Main(string[] argv)
@@ -73,6 +77,7 @@ public sealed class Program : IHostedService, IDisposable
 
         hostBuilder.Services
             .AddSingleton<SessionStorage>()
+            .AddSingleton<WebUiPasswordStorage>()
             .AddHostedService<Program>();
 
         using var host = hostBuilder.Build();
@@ -90,6 +95,8 @@ public sealed class Program : IHostedService, IDisposable
             await db.Database.MigrateAsync(ct);
             await db.SaveChangesAsync(ct);
         }
+
+        await EnsurePassword(ct);
 
         var apiSession = await ResumeSession(_persistenceManager, _sessionStorage, false, ct);
         var client = new ProtonDriveClient(apiSession);
@@ -328,11 +335,18 @@ public sealed class Program : IHostedService, IDisposable
         var stream = Utils.GetResponseStream(ctx.Response);
         stream.WriteTimeout = 5000;
 
-        if (ctx.Request.Authorization.Password != "password")
+        var (_, expectedPassword) = await _webUiPasswordStorage.GetPassword(ctx.Token);
+        var expectedPasswordBytes = Encoding.UTF8.GetBytes(expectedPassword);
+
+        var gotPassword = ctx.Request.Authorization.Password ?? "";
+        var gotPasswordBytes = Encoding.UTF8.GetBytes(gotPassword);
+
+        if (!CryptographicOperations.FixedTimeEquals(expectedPasswordBytes, gotPasswordBytes))
         {
             ctx.Response.StatusCode = 401;
             ctx.Response.Headers["WWW-Authenticate"] = "Basic realm=\"User Visible Realm\", charset=\"UTF-8\"";
-            await ctx.Response.Send();
+            ctx.Response.ContentType = "text/plain";
+            await ctx.Response.Send("Incorrect password");
         }
     }
 
@@ -372,6 +386,27 @@ public sealed class Program : IHostedService, IDisposable
                 Console.WriteLine($"Connections: {numConnections}");
             }
         };
+    }
+
+    private async Task EnsurePassword(CancellationToken ct)
+    {
+        bool exists;
+        string password;
+
+        if (_settings.Value.ResetPassword)
+        {
+            exists = false;
+            password = await _webUiPasswordStorage.ResetPassword(ct);
+        }
+        else
+        {
+            (exists, password) = await _webUiPasswordStorage.GetPassword(ct);
+        }
+
+        if (!exists)
+        {
+            Console.Error.WriteLine("Web UI Password: {0}", password);
+        }
     }
 
     private async Task<ProtonApiSession> ResumeSession(
