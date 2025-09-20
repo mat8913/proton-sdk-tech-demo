@@ -21,14 +21,22 @@ public sealed class NodeMetadataCache(PersistenceManager persistenceManager)
             x.VolumeId == nodeMetadata.VolumeId &&
             x.NodeId == nodeMetadata.ParentNodeId);
 
-        if (!tracked)
-            return;
-
         db.TrackedVolumes
             .Where(x => x.VolumeId == nodeMetadata.VolumeId)
             .ExecuteUpdate(s => s.SetProperty(x => x.LatestEventId, eventId));
 
-        db.NodeMetadata.Upsert(nodeMetadata).Run();
+        if (tracked)
+        {
+            db.NodeMetadata.Upsert(nodeMetadata).Run();
+        }
+        else
+        {
+            db.NodeMetadata
+                .Where(x =>
+                    x.VolumeId == nodeMetadata.VolumeId &&
+                    x.NodeId == nodeMetadata.NodeId)
+                .ExecuteDelete();
+        }
 
         db.SaveChanges();
         transaction.Commit();
