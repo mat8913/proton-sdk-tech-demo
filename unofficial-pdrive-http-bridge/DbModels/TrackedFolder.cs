@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 
 namespace unofficial_pdrive_http_bridge.DbModels;
@@ -11,5 +10,4 @@ public sealed class TrackedFolder
 {
     public required string VolumeId { get; set; }
     public required string NodeId { get; set; }
-    public List<NodeMetadata> Children { get; } = new List<NodeMetadata>();
 }

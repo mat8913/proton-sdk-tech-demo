@@ -65,6 +65,7 @@ public sealed class NodeMetadataCacher(NodeMetadataCache cache, ProtonDriveClien
             {
                 children = await _client.GetFolderChildrenAsync(new NodeIdentity(new(shareId), new(volumeId), new(nodeId)), ct)
                     .Select(ApiNodeToModel)
+                    .OrderBy(x => x.Name)
                     .ToListAsync(ct);
 
                 await _cache.SetChildren(handler.EventId, volumeId, nodeId, children, ct);

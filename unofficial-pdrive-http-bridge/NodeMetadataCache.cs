@@ -72,13 +72,22 @@ public sealed class NodeMetadataCache(PersistenceManager persistenceManager)
         using var db = _persistenceManager.GetProgramDbContext();
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
-        return await db.TrackedFolders
+        var trackedFolder = await db.TrackedFolders
             .AsNoTracking()
             .Where(x =>
                 x.VolumeId == volumeId &&
                 x.NodeId == nodeId)
-            .Select(x => x.Children)
             .SingleOrDefaultAsync(ct);
+
+        if (trackedFolder is null)
+            return null;
+
+        return await db.NodeMetadata
+            .Where(x =>
+                x.VolumeId == volumeId &&
+                x.ParentNodeId == nodeId)
+            .OrderBy(x => x.Name)
+            .ToListAsync(ct);
     }
 
     public async Task<List<DbModels.TrackedVolume>> GetVolumes(CancellationToken ct)

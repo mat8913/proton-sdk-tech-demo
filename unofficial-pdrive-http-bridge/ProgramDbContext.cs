@@ -56,7 +56,7 @@ public sealed class ProgramDbContext : DbContext
 
         modelBuilder
             .Entity<TrackedFolder>()
-            .HasMany(e => e.Children)
+            .HasMany<NodeMetadata>()
             .WithOne()
             .HasPrincipalKey(e => new { e.VolumeId, e.NodeId })
             .HasForeignKey(e => new { e.VolumeId, e.ParentNodeId })
