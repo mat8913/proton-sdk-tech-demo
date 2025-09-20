@@ -14,35 +14,29 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Proton.Sdk;
 using Proton.Sdk.Drive;
 using WatsonWebserver.Core;
 using WatsonWebserver.Lite;
 
 namespace unofficial_pdrive_http_bridge;
 
-public sealed class Program : IHostedService, IDisposable
+public sealed class Program(
+    ILoggerFactory loggerFactory,
+    IOptions<Settings> settings,
+    PersistenceManager persistenceManager,
+    ProtonSessionManager protonSessionManager,
+    WebUiPasswordStorage webUiPasswordStorage)
+    : IHostedService, IDisposable
 {
-    private const string APP_NAME = "macos-drive@1.0.0-alpha.1+rclone";
-    private readonly ILoggerFactory _loggerFactory;
-    private readonly IOptions<Settings> _settings;
-    private readonly PersistenceManager _persistenceManager;
-    private readonly SessionStorage _sessionStorage;
-    private readonly WebUiPasswordStorage _webUiPasswordStorage;
-    private readonly NodeMetadataCache _nodeMetadataCache;
+    private readonly ILoggerFactory _loggerFactory = loggerFactory;
+    private readonly IOptions<Settings> _settings = settings;
+    private readonly PersistenceManager _persistenceManager = persistenceManager;
+    private readonly ProtonSessionManager _protonSessionManager = protonSessionManager;
+    private readonly WebUiPasswordStorage _webUiPasswordStorage = webUiPasswordStorage;
     private WebserverLite? _webserver;
-    private Session? _session;
     private int _connectionCount;
 
-    public Program(ILoggerFactory loggerFactory, IOptions<Settings> settings, PersistenceManager persistenceManager, SessionStorage sessionStorage, WebUiPasswordStorage webUiPasswordStorage, NodeMetadataCache nodeMetadataCache)
-    {
-        _loggerFactory = loggerFactory;
-        _settings = settings;
-        _persistenceManager = persistenceManager;
-        _sessionStorage = sessionStorage;
-        _webUiPasswordStorage = webUiPasswordStorage;
-        _nodeMetadataCache = nodeMetadataCache;
-    }
+    private ProtonSession? ProtonSession => _protonSessionManager.ProtonSession;
 
     public static async Task Main(string[] argv)
     {
@@ -81,6 +75,7 @@ public sealed class Program : IHostedService, IDisposable
             .AddSingleton<SessionStorage>()
             .AddSingleton<WebUiPasswordStorage>()
             .AddSingleton<NodeMetadataCache>()
+            .AddSingleton<ProtonSessionManager>()
             .AddHostedService<Program>();
 
         using var host = hostBuilder.Build();
@@ -101,31 +96,7 @@ public sealed class Program : IHostedService, IDisposable
 
         await EnsurePassword(ct);
 
-        var apiSession = await ResumeSession(_persistenceManager, _sessionStorage, true, ct);
-        var client = new ProtonDriveClient(apiSession);
-        var nodeMetadataCacher = new NodeMetadataCacher(_nodeMetadataCache, client);
-        await nodeMetadataCacher.StartAsync(ct);
-        _session = new(apiSession, client, nodeMetadataCacher);
-
-        /*
-        // Q: Does share id change when descending directories
-        // A: Seems not to. Different share ids can refer to the same object.
-        //    Only the (volumeId, nodeId) seem to identify an object. The shareId seems more
-        //    like a ticket to access the object.
-        var shareIds = await _session.Value.ProtonDriveClient.GetShareIdsAsync(ct);
-        foreach (var shareId in shareIds)
-        {
-            var share = await _session.Value.ProtonDriveClient.GetShareAsync(shareId, ct);
-
-            Console.WriteLine($"Share: {shareId.Value}, Volume: {share.VolumeId.Value}, Node: {share.RootNodeId.Value}");
-            var children = _session.Value.ProtonDriveClient.GetFolderChildrenAsync(new NodeIdentity(shareId, share.VolumeId, share.RootNodeId), ct);
-            await foreach (var child in children)
-            {
-                Console.WriteLine(child.Name);
-            }
-            Console.WriteLine();
-        }
-        */
+        await _protonSessionManager.Start(ct);
 
         var webserverLogger = _loggerFactory.CreateLogger<WebserverLite>();
         WebserverSettings settings = new WebserverSettings(_settings.Value.Hostname ?? "127.0.0.1", _settings.Value.Port ?? 9000);
@@ -177,13 +148,13 @@ public sealed class Program : IHostedService, IDisposable
 
     private async Task<HttpModels.VolumeList?> OnGetVolumesRequest(HttpContextBase ctx)
     {
-        if (!_session.HasValue)
+        if (ProtonSession is null)
         {
             // TODO: Redirect to login
             throw new InvalidOperationException("Session not initialized");
         }
 
-        var volumes = await _session.Value.ProtonDriveClient.GetVolumesAsync(ctx.Token);
+        var volumes = await ProtonSession.ProtonDriveClient.GetVolumesAsync(ctx.Token);
         var modelVolumes = volumes
             .Select(volume => new HttpModels.Volume
             {
@@ -203,7 +174,7 @@ public sealed class Program : IHostedService, IDisposable
 
     private async Task<HttpModels.NodeMetadata?> OnGetNodeMetadataByIdRequest(HttpContextBase ctx)
     {
-        if (!_session.HasValue)
+        if (ProtonSession is null)
         {
             // TODO: Redirect to login
             throw new InvalidOperationException("Session not initialized");
@@ -213,7 +184,7 @@ public sealed class Program : IHostedService, IDisposable
         var shareId = ctx.Request.Url.Parameters["shareId"] ?? throw new ArgumentNullException("shareId");
         var nodeId = ctx.Request.Url.Parameters["nodeId"] ?? throw new ArgumentNullException("nodeId");
 
-        var node = await _session.Value.ProtonDriveClient.GetNodeAsync(new(shareId), new(nodeId), ctx.Token);
+        var node = await ProtonSession.ProtonDriveClient.GetNodeAsync(new(shareId), new(nodeId), ctx.Token);
 
         var metadata = GetNodeMetadata(volumeId, shareId, node);
 
@@ -276,7 +247,7 @@ public sealed class Program : IHostedService, IDisposable
 
     private async Task<HttpModels.NodeChildren?> OnGetNodeContentByIdRequest(HttpContextBase ctx)
     {
-        if (!_session.HasValue)
+        if (ProtonSession is null)
         {
             // TODO: Redirect to login
             throw new InvalidOperationException("Session not initialized");
@@ -286,12 +257,12 @@ public sealed class Program : IHostedService, IDisposable
         var shareId = ctx.Request.Url.Parameters["shareId"] ?? throw new ArgumentNullException("shareId");
         var nodeId = ctx.Request.Url.Parameters["nodeId"] ?? throw new ArgumentNullException("nodeId");
 
-        var node = await _session.Value.ProtonDriveClient.GetNodeAsync(new(shareId), new(nodeId), ctx.Token);
+        var node = await ProtonSession.ProtonDriveClient.GetNodeAsync(new(shareId), new(nodeId), ctx.Token);
         var nodeIdentity = new NodeIdentity(new(shareId), new(volumeId), new(nodeId));
 
         if (node is FileNode fileNode)
         {
-            using var downloader = await _session.Value.ProtonDriveClient.WaitForFileDownloaderAsync(ctx.Token);
+            using var downloader = await ProtonSession.ProtonDriveClient.WaitForFileDownloaderAsync(ctx.Token);
             var pipe = new Pipe(new(
                 pauseWriterThreshold: RevisionWriter.DefaultBlockSize * 2,
                 resumeWriterThreshold: RevisionWriter.DefaultBlockSize));
@@ -332,7 +303,7 @@ public sealed class Program : IHostedService, IDisposable
             return null;
         }
 
-        var children = (await _session.Value.NodeMetadataCacher
+        var children = (await ProtonSession.NodeMetadataCacher
             .GetChildren(nodeIdentity.VolumeId.Value, nodeIdentity.NodeId.Value, nodeIdentity.ShareId.Value, ctx.Token))
             .Select(child => GetNodeMetadata2(shareId, child));
 
@@ -438,49 +409,4 @@ public sealed class Program : IHostedService, IDisposable
             Console.Error.WriteLine("Web UI Password: {0}", password);
         }
     }
-
-    private async Task<ProtonApiSession> ResumeSession(
-        PersistenceManager persistenceManager,
-        SessionStorage sessionStorage,
-        bool enableSdkLog,
-        CancellationToken ct)
-    {
-        var savedSession = await sessionStorage.TryLoadSession(ct) ?? throw new InvalidOperationException("no saved session");
-
-        var secretsCache = new DbSecretsCache(persistenceManager);
-
-        var options = new ProtonClientOptions
-        {
-            AppVersion = APP_NAME,
-            SecretsCache = secretsCache,
-        };
-        if (enableSdkLog)
-        {
-            options.LoggerFactory = new WarnLoggerFactory(_loggerFactory);
-        }
-
-        var sessionResumeRequest = new SessionResumeRequest
-        {
-            SessionId = new() { Value = savedSession.SessionId },
-            Username = savedSession.Username,
-            UserId = new() { Value = savedSession.UserId },
-            AccessToken = savedSession.AccessToken,
-            RefreshToken = savedSession.RefreshToken,
-            IsWaitingForSecondFactorCode = savedSession.IsWaitingForSecondFactorCode,
-            PasswordMode = (PasswordMode)savedSession.PasswordMode,
-            Options = options,
-        };
-        sessionResumeRequest.Scopes.AddRange(savedSession.Scopes);
-
-        var session = ProtonApiSession.Resume(sessionResumeRequest);
-
-        session.TokenCredential.TokensRefreshed += (accessToken, refreshToken) =>
-        {
-            sessionStorage.UpdateTokens(accessToken, refreshToken);
-        };
-
-        return session;
-    }
-
-    private readonly record struct Session(ProtonApiSession ProtonApiSession, ProtonDriveClient ProtonDriveClient, NodeMetadataCacher NodeMetadataCacher);
 }
