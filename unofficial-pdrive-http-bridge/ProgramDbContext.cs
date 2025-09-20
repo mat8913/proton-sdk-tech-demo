@@ -14,6 +14,9 @@ public sealed class ProgramDbContext : DbContext
     public DbSet<SecretsCacheSecret> SecretsCacheSecrets { get; set; }
     public DbSet<SecretsCacheGroup> SecretsCacheGroups { get; set; }
     public DbSet<WebUiPassword> WebUiPasswords { get; set; }
+    public DbSet<TrackedVolume> TrackedVolumes { get; set; }
+    public DbSet<TrackedFolder> TrackedFolders { get; set; }
+    public DbSet<NodeMetadata> NodeMetadata { get; set; }
 
     public string DbPath { get; }
 
@@ -39,5 +42,24 @@ public sealed class ProgramDbContext : DbContext
         options
             .UseSqlite(connectionString)
             .UseLoggerFactory(_loggerFactory);
+    }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder
+            .Entity<TrackedVolume>()
+            .HasMany<TrackedFolder>()
+            .WithOne()
+            .HasPrincipalKey(e => e.VolumeId)
+            .HasForeignKey(e => e.VolumeId)
+            .IsRequired(true);
+
+        modelBuilder
+            .Entity<TrackedFolder>()
+            .HasMany(e => e.Children)
+            .WithOne()
+            .HasPrincipalKey(e => new { e.VolumeId, e.NodeId })
+            .HasForeignKey(e => new { e.VolumeId, e.ParentNodeId })
+            .IsRequired(true);
     }
 }

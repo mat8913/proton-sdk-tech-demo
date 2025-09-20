@@ -29,17 +29,19 @@ public sealed class Program : IHostedService, IDisposable
     private readonly PersistenceManager _persistenceManager;
     private readonly SessionStorage _sessionStorage;
     private readonly WebUiPasswordStorage _webUiPasswordStorage;
+    private readonly NodeMetadataCache _nodeMetadataCache;
     private WebserverLite? _webserver;
     private Session? _session;
     private int _connectionCount;
 
-    public Program(ILoggerFactory loggerFactory, IOptions<Settings> settings, PersistenceManager persistenceManager, SessionStorage sessionStorage, WebUiPasswordStorage webUiPasswordStorage)
+    public Program(ILoggerFactory loggerFactory, IOptions<Settings> settings, PersistenceManager persistenceManager, SessionStorage sessionStorage, WebUiPasswordStorage webUiPasswordStorage, NodeMetadataCache nodeMetadataCache)
     {
         _loggerFactory = loggerFactory;
         _settings = settings;
         _persistenceManager = persistenceManager;
         _sessionStorage = sessionStorage;
         _webUiPasswordStorage = webUiPasswordStorage;
+        _nodeMetadataCache = nodeMetadataCache;
     }
 
     public static async Task Main(string[] argv)
@@ -78,6 +80,7 @@ public sealed class Program : IHostedService, IDisposable
         hostBuilder.Services
             .AddSingleton<SessionStorage>()
             .AddSingleton<WebUiPasswordStorage>()
+            .AddSingleton<NodeMetadataCache>()
             .AddHostedService<Program>();
 
         using var host = hostBuilder.Build();
@@ -100,7 +103,9 @@ public sealed class Program : IHostedService, IDisposable
 
         var apiSession = await ResumeSession(_persistenceManager, _sessionStorage, true, ct);
         var client = new ProtonDriveClient(apiSession);
-        _session = new(apiSession, client);
+        var nodeMetadataCacher = new NodeMetadataCacher(_nodeMetadataCache, client);
+        await nodeMetadataCacher.StartAsync(ct);
+        _session = new(apiSession, client, nodeMetadataCacher);
 
         /*
         // Q: Does share id change when descending directories
@@ -244,6 +249,31 @@ public sealed class Program : IHostedService, IDisposable
         return metadata;
     }
 
+    private static HttpModels.NodeMetadata GetNodeMetadata2(string shareId, DbModels.NodeMetadata node)
+    {
+        var metadata = new HttpModels.NodeMetadata
+        {
+            NodeId = node.NodeId,
+            Name = node.Name,
+            ParentId = node.ParentNodeId,
+            State = "active",
+            ActiveRevisionId = node.ActiveRevisionId,
+            Size = node.Size,
+            Url = $"/volumes/{node.VolumeId}/shares/{shareId}/node-content/by-id/{node.NodeId}",
+        };
+
+        if (node.IsFile)
+        {
+            metadata.Type = HttpModels.NodeType.File;
+        }
+        else
+        {
+            metadata.Type = HttpModels.NodeType.Folder;
+        }
+
+        return metadata;
+    }
+
     private async Task<HttpModels.NodeChildren?> OnGetNodeContentByIdRequest(HttpContextBase ctx)
     {
         if (!_session.HasValue)
@@ -302,9 +332,9 @@ public sealed class Program : IHostedService, IDisposable
             return null;
         }
 
-        var children = _session.Value.ProtonDriveClient
-            .GetFolderChildrenAsync(nodeIdentity, ctx.Token)
-            .Select(child => GetNodeMetadata(volumeId, shareId, child));
+        var children = (await _session.Value.NodeMetadataCacher
+            .GetChildren(nodeIdentity.VolumeId.Value, nodeIdentity.NodeId.Value, nodeIdentity.ShareId.Value, ctx.Token))
+            .Select(child => GetNodeMetadata2(shareId, child));
 
         if (node.ParentId is not null)
         {
@@ -325,7 +355,7 @@ public sealed class Program : IHostedService, IDisposable
             VolumeId = volumeId,
             ShareId = shareId,
             NodeId = nodeId,
-            Children = await children.ToArrayAsync(ctx.Token),
+            Children = children.ToArray(),
         };
     }
 
@@ -452,5 +482,5 @@ public sealed class Program : IHostedService, IDisposable
         return session;
     }
 
-    private readonly record struct Session(ProtonApiSession ProtonApiSession, ProtonDriveClient ProtonDriveClient);
+    private readonly record struct Session(ProtonApiSession ProtonApiSession, ProtonDriveClient ProtonDriveClient, NodeMetadataCacher NodeMetadataCacher);
 }

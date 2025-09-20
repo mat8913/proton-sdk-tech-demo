@@ -1,101 +1,70 @@
 using System;
+using System.Threading.Tasks;
 using Proton.Sdk.Drive;
 
 namespace unofficial_pdrive_http_bridge;
 
 public sealed class VolumeEventHandler
 {
-    private readonly string _volumeId;
+    private readonly VolumeEventChannel _channel;
+    private readonly NodeMetadataCache _cache;
 
-    public VolumeEventHandler(VolumeId volumeId)
+    public VolumeEventHandler(VolumeEventChannel channel, NodeMetadataCache cache)
     {
-        _volumeId = volumeId.Value ?? throw new ArgumentNullException(nameof(volumeId));
+        if (!channel.BaselineEventId.HasValue)
+        {
+            throw new ArgumentNullException("BaselineEventId");
+        }
+
+        _channel = channel;
+        _cache = cache;
+
+        _channel.NodeCreated += Wrap1<INode>(OnNodeChanged);
+        _channel.NodeMetadataChanged += Wrap1<INode>(OnNodeChanged);
+        _channel.FileContentsChanged += Wrap1<FileNode>(OnNodeChanged);
+        _channel.NodeDeleted += Wrap2<VolumeId, LinkId>(OnNodeDeleted);
     }
 
-    public void Connect(VolumeEventChannel channel)
+    public string VolumeId => _channel.VolumeId.Value;
+
+    public string EventId => _channel.BaselineEventId!.Value.Value;
+
+    public void Start()
     {
-        channel.NodeCreated += Wrap1<INode>(OnNodeCreated);
-        channel.NodeMetadataChanged += Wrap1<INode>(OnNodeMetadataChanged);
-        channel.FileContentsChanged += Wrap1<FileNode>(OnFileContentsChanged);
-        channel.NodeDeleted += Wrap2<VolumeId, LinkId>(OnNodeDeleted);
+        _channel.Start();
     }
 
-    private void OnNodeCreated(VolumeEventId eventId, INode node)
+    public async Task Stop()
     {
-        var fileNode = node as FileNode;
-
-        Console.WriteLine($"""
-
-        [NODEWATCHER] {eventId}
-            NodeCreated
-            VolumeId: {node.NodeIdentity.VolumeId.Value}
-            NodeId: {node.NodeIdentity.NodeId.Value}
-            Name: {node.Name}
-            Parent NodeId: {node.ParentId?.Value ?? "(null)"}
-            State: {node.State}
-            MediaType: {fileNode?.MediaType ?? "(null)"}
-            Revision: {fileNode?.ActiveRevision?.RevisionId?.Value ?? "(null)"}
-            Size: {fileNode?.ActiveRevision?.Size.ToString() ?? "(null)"}
-            ModTime: {fileNode?.ActiveRevision?.CreationTime.ToString() ?? "(null)"}
-
-        """);
+        await _channel.StopAsync();
     }
 
-    private void OnNodeMetadataChanged(VolumeEventId eventId, INode node)
+    private void OnNodeChanged(VolumeEventId eventId, INode node)
     {
-        var fileNode = node as FileNode;
+        if (VolumeId != node.NodeIdentity.VolumeId.Value)
+        {
+            throw new InvalidOperationException($"Wrong volume ID. Expected: {VolumeId}. Got: {node.NodeIdentity.VolumeId.Value}.");
+        }
 
-        Console.WriteLine($"""
+        if (node.State != NodeState.Active)
+        {
+            OnNodeDeleted(eventId, node.NodeIdentity.VolumeId, node.NodeIdentity.NodeId);
+            return;
+        }
 
-        [NODEWATCHER] {eventId}
-            NodeMetadataChanged
-            VolumeId: {node.NodeIdentity.VolumeId.Value}
-            NodeId: {node.NodeIdentity.NodeId.Value}
-            Name: {node.Name}
-            Parent NodeId: {node.ParentId?.Value ?? "(null)"}
-            State: {node.State}
-            MediaType: {fileNode?.MediaType ?? "(null)"}
-            Revision: {fileNode?.ActiveRevision?.RevisionId?.Value ?? "(null)"}
-            Size: {fileNode?.ActiveRevision?.Size.ToString() ?? "(null)"}
-            ModTime: {fileNode?.ActiveRevision?.CreationTime.ToString() ?? "(null)"}
+        var nodeMetadata = NodeMetadataCacher.ApiNodeToModel(node);
 
-        """);
-    }
-
-    private void OnFileContentsChanged(VolumeEventId eventId, FileNode node)
-    {
-        Console.WriteLine($"""
-
-        [NODEWATCHER] {eventId}
-            FileContentsChanged
-            VolumeId: {node.NodeIdentity.VolumeId.Value}
-            NodeId: {node.NodeIdentity.NodeId.Value}
-            Name: {node.Name}
-            Parent NodeId: {node.ParentId?.Value ?? "(null)"}
-            State: {node.State}
-            MediaType: {node.MediaType ?? "(null)"}
-            Revision: {node.ActiveRevision?.RevisionId?.Value ?? "(null)"}
-            Size: {node.ActiveRevision?.Size.ToString() ?? "(null)"}
-            ModTime: {node.ActiveRevision?.CreationTime.ToString() ?? "(null)"}
-
-        """);
+        _cache.OnNodeUpdate(eventId.Value, nodeMetadata);
     }
 
     private void OnNodeDeleted(VolumeEventId eventId, VolumeId volumeId, LinkId nodeId)
     {
-        if (_volumeId != volumeId.Value)
+        if (VolumeId != volumeId.Value)
         {
-            throw new InvalidOperationException($"Wrong volume ID. Expected: {_volumeId}. Got: {volumeId.Value}.");
+            throw new InvalidOperationException($"Wrong volume ID. Expected: {VolumeId}. Got: {volumeId.Value}.");
         }
 
-        Console.WriteLine($"""
-
-        [NODEWATCHER] {eventId}
-            NodeDeleted
-            VolumeId: {volumeId.Value}
-            NodeId: {nodeId.Value}
-
-        """);
+        _cache.OnNodeDelete(eventId.Value, volumeId.Value, nodeId.Value);
     }
 
     private Action<VolumeEventId, T> Wrap1<T>(Action<VolumeEventId, T> f)
