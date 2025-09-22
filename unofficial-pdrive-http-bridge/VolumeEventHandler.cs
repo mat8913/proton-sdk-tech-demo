@@ -52,7 +52,7 @@ public sealed class VolumeEventHandler
             return;
         }
 
-        var nodeMetadata = NodeMetadataCacher.ApiNodeToModel(node);
+        var nodeMetadata = Converters.ProtonNodeToDbModel(node);
 
         _cache.OnNodeUpdate(eventId.Value, nodeMetadata);
     }

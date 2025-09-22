@@ -186,61 +186,7 @@ public sealed class Program(
 
         var node = await ProtonSession.ProtonDriveClient.GetNodeAsync(new(shareId), new(nodeId), ctx.Token);
 
-        var metadata = GetNodeMetadata(volumeId, shareId, node);
-
-        return metadata;
-    }
-
-    private static HttpModels.NodeMetadata GetNodeMetadata(string volumeId, string shareId, INode node)
-    {
-        var metadata = new HttpModels.NodeMetadata
-        {
-            NodeId = node.NodeIdentity.NodeId.Value,
-            Name = node.Name,
-            ParentId = node.ParentId?.Value,
-            State = node.State.ToString(),
-            Url = $"/volumes/{volumeId}/shares/{shareId}/node-content/by-id/{node.NodeIdentity.NodeId.Value}",
-        };
-
-        if (node is FileNode fileNode)
-        {
-            metadata.ActiveRevisionId = fileNode.ActiveRevision?.RevisionId?.Value;
-            metadata.Size = fileNode.ActiveRevision?.Size;
-            metadata.Type = HttpModels.NodeType.File;
-        }
-        else if (node is FolderNode)
-        {
-            metadata.Type = HttpModels.NodeType.Folder;
-        }
-        else
-        {
-            throw new InvalidOperationException($"Unknown node type: {node.GetType()}");
-        }
-
-        return metadata;
-    }
-
-    private static HttpModels.NodeMetadata GetNodeMetadata2(string shareId, DbModels.NodeMetadata node)
-    {
-        var metadata = new HttpModels.NodeMetadata
-        {
-            NodeId = node.NodeId,
-            Name = node.Name,
-            ParentId = node.ParentNodeId,
-            State = "active",
-            ActiveRevisionId = node.ActiveRevisionId,
-            Size = node.Size,
-            Url = $"/volumes/{node.VolumeId}/shares/{shareId}/node-content/by-id/{node.NodeId}",
-        };
-
-        if (node.IsFile)
-        {
-            metadata.Type = HttpModels.NodeType.File;
-        }
-        else
-        {
-            metadata.Type = HttpModels.NodeType.Folder;
-        }
+        var metadata = Converters.ProtonNodeToHttpModel(volumeId, shareId, node);
 
         return metadata;
     }
@@ -305,7 +251,7 @@ public sealed class Program(
 
         var children = (await ProtonSession.NodeMetadataCacher
             .GetChildren(nodeIdentity.VolumeId.Value, nodeIdentity.NodeId.Value, nodeIdentity.ShareId.Value, ctx.Token))
-            .Select(child => GetNodeMetadata2(shareId, child));
+            .Select(child => Converters.DbModelNodeMetadataToHttpModel(shareId, child));
 
         if (node.ParentId is not null)
         {
@@ -318,7 +264,7 @@ public sealed class Program(
                 Name = "(Parent Directory)",
                 State = NodeState.Active,
             };
-            children = children.Prepend(GetNodeMetadata(volumeId, shareId, parentNode));
+            children = children.Prepend(Converters.ProtonNodeToHttpModel(volumeId, shareId, parentNode));
         }
 
         return new()

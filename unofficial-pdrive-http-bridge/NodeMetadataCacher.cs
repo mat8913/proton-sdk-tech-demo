@@ -64,7 +64,7 @@ public sealed class NodeMetadataCacher(NodeMetadataCache cache, ProtonDriveClien
             try
             {
                 children = await _client.GetFolderChildrenAsync(new NodeIdentity(new(shareId), new(volumeId), new(nodeId)), ct)
-                    .Select(ApiNodeToModel)
+                    .Select(Converters.ProtonNodeToDbModel)
                     .OrderBy(x => x.Name)
                     .ToListAsync(ct);
 
@@ -81,24 +81,6 @@ public sealed class NodeMetadataCacher(NodeMetadataCache cache, ProtonDriveClien
         {
             _sync.Release();
         }
-    }
-
-    public static DbModels.NodeMetadata ApiNodeToModel(INode node)
-    {
-        var fileNode = node as FileNode;
-
-        return new DbModels.NodeMetadata
-        {
-            VolumeId = node.NodeIdentity.VolumeId.Value,
-            NodeId = node.NodeIdentity.NodeId.Value,
-            Name = node.Name,
-            ParentNodeId = node.ParentId!.Value,
-            IsFile = fileNode is not null,
-            MediaType = fileNode?.MediaType,
-            ActiveRevisionId = fileNode?.ActiveRevision.RevisionId.Value,
-            Size = fileNode?.ActiveRevision.Size,
-            ModificationTime = fileNode?.ActiveRevision.CreationTime,
-        };
     }
 
     // assumes lock is already taken
