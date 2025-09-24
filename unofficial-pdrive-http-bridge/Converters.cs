@@ -16,7 +16,7 @@ public static class Converters
             VolumeId = node.NodeIdentity.VolumeId.Value,
             NodeId = node.NodeIdentity.NodeId.Value,
             Name = node.Name,
-            ParentNodeId = node.ParentId!.Value,
+            ParentNodeId = node.ParentId?.Value ?? string.Empty,
             IsFile = fileNode is not null,
             MediaType = fileNode?.MediaType,
             ActiveRevisionId = fileNode?.ActiveRevision.RevisionId.Value,
@@ -31,7 +31,7 @@ public static class Converters
         {
             NodeId = node.NodeId,
             Name = node.Name,
-            ParentId = node.ParentNodeId,
+            ParentId = string.IsNullOrEmpty(node.ParentNodeId) ? null : node.ParentNodeId,
             State = "Active",
             ActiveRevisionId = node.ActiveRevisionId,
             Size = node.Size,
