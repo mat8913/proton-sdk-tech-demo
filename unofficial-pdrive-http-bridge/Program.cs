@@ -203,10 +203,10 @@ public sealed class Program(
         var shareId = ctx.Request.Url.Parameters["shareId"] ?? throw new ArgumentNullException("shareId");
         var nodeId = ctx.Request.Url.Parameters["nodeId"] ?? throw new ArgumentNullException("nodeId");
 
-        var node = await ProtonSession.ProtonDriveClient.GetNodeAsync(new(shareId), new(nodeId), ctx.Token);
         var nodeIdentity = new NodeIdentity(new(shareId), new(volumeId), new(nodeId));
+        var nodeMetadata = await ProtonSession.NodeMetadataCacher.GetNodeMetadata(volumeId, nodeId, shareId, ctx.Token);
 
-        if (node is FileNode fileNode)
+        if (nodeMetadata.IsFile)
         {
             using var downloader = await ProtonSession.ProtonDriveClient.WaitForFileDownloaderAsync(ctx.Token);
             var pipe = new Pipe(new(
@@ -215,7 +215,7 @@ public sealed class Program(
             await using var writerStream = pipe.Writer.AsStream();
             await using var readerStream = pipe.Reader.AsStream();
 
-            long totalSize = fileNode.ActiveRevision.Size;
+            long totalSize = nodeMetadata.Size!.Value;
             long startPos = 0;
             if (RangeHeaderValue.TryParse(ctx.Request.Headers["Range"], out var range))
             {
@@ -238,8 +238,9 @@ public sealed class Program(
                 ctx.Response.Headers["Content-Range"] = $"bytes {startPos}-{endPos}/{totalSize}";
             }
             ctx.Response.Headers["Accept-Ranges"] = "bytes";
-            ctx.Response.ContentType = fileNode.MediaType ?? "application/octet-stream";
-            var downloadTask = Task.Run(() => downloader.DownloadAsync(nodeIdentity, fileNode.ActiveRevision, writerStream, (_, _) => { }, ctx.Token, startPos));
+            ctx.Response.ContentType = nodeMetadata.MediaType ?? "application/octet-stream";
+            var revision = await ProtonSession.ProtonDriveClient.GetFileRevisionAsync(nodeIdentity, new(nodeMetadata.ActiveRevisionId!), ctx.Token);
+            var downloadTask = Task.Run(() => downloader.DownloadAsync(nodeIdentity, revision, writerStream, (_, _) => { }, ctx.Token, startPos));
             var senderTask = ctx.Response.Send(contentSize, readerStream);
             await foreach (var t in Task.WhenEach(downloadTask, senderTask))
             {
@@ -253,13 +254,13 @@ public sealed class Program(
             .GetChildren(nodeIdentity.VolumeId.Value, nodeIdentity.NodeId.Value, nodeIdentity.ShareId.Value, ctx.Token))
             .Select(child => Converters.DbModelNodeMetadataToHttpModel(shareId, child));
 
-        if (node.ParentId is not null)
+        if (!string.IsNullOrEmpty(nodeMetadata.ParentNodeId))
         {
             var parentNode = new FolderNode
             {
                 NodeIdentity = new()
                 {
-                    NodeId = node.ParentId,
+                    NodeId = new(nodeMetadata.ParentNodeId),
                 },
                 Name = "(Parent Directory)",
                 State = NodeState.Active,

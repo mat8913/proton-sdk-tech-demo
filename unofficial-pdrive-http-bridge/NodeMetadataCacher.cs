@@ -83,6 +83,17 @@ public sealed class NodeMetadataCacher(NodeMetadataCache cache, ProtonDriveClien
         }
     }
 
+    public async Task<DbModels.NodeMetadata> GetNodeMetadata(string volumeId, string nodeId, string shareId, CancellationToken ct)
+    {
+        var nodeMetadata = await _cache.TryGetNodeMetadata(volumeId, nodeId, ct);
+        if (nodeMetadata is not null)
+            return nodeMetadata;
+
+        var node = await _client.GetNodeAsync(new(shareId), new(nodeId), ct);
+        nodeMetadata = Converters.ProtonNodeToDbModel(node);
+        return nodeMetadata;
+    }
+
     // assumes lock is already taken
     private async Task<VolumeEventHandler> EnsureVolumeEventHandler(string volumeId, CancellationToken ct)
     {

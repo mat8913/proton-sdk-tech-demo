@@ -100,6 +100,16 @@ public sealed class NodeMetadataCache(PersistenceManager persistenceManager)
             .ToListAsync(ct);
     }
 
+    public async Task<DbModels.NodeMetadata?> TryGetNodeMetadata(string volumeId, string nodeId, CancellationToken ct)
+    {
+        using var db = _persistenceManager.GetProgramDbContext();
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
+        return await db.NodeMetadata
+            .AsNoTracking()
+            .SingleOrDefaultAsync(x => x.VolumeId == volumeId && x.NodeId == nodeId, ct);
+    }
+
     public async Task SetChildren(string eventId, string volumeId, string nodeId, IReadOnlyList<DbModels.NodeMetadata> children, CancellationToken ct)
     {
         foreach (var child in children)
