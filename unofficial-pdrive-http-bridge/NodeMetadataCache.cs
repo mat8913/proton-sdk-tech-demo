@@ -12,7 +12,7 @@ public sealed class NodeMetadataCache(PersistenceManager persistenceManager)
 {
     private readonly PersistenceManager _persistenceManager = persistenceManager;
 
-    public void OnNodeUpdate(string eventId, DbModels.NodeMetadata nodeMetadata)
+    public void OnNodeUpdate(string? eventId, DbModels.NodeMetadata nodeMetadata)
     {
         using var db = _persistenceManager.GetProgramDbContext();
         using var transaction = db.Database.BeginTransaction(IsolationLevel.Serializable);
@@ -21,9 +21,23 @@ public sealed class NodeMetadataCache(PersistenceManager persistenceManager)
             x.VolumeId == nodeMetadata.VolumeId &&
             x.NodeId == nodeMetadata.ParentNodeId);
 
-        db.TrackedVolumes
-            .Where(x => x.VolumeId == nodeMetadata.VolumeId)
-            .ExecuteUpdate(s => s.SetProperty(x => x.LatestEventId, eventId));
+        // always track root node
+        if (!tracked && string.IsNullOrEmpty(nodeMetadata.ParentNodeId))
+        {
+            db.TrackedFolders.Upsert(new DbModels.TrackedFolder
+            {
+                VolumeId = nodeMetadata.VolumeId,
+                NodeId = nodeMetadata.ParentNodeId,
+            }).Run();
+            tracked = true;
+        }
+
+        if (eventId is not null)
+        {
+            db.TrackedVolumes
+                .Where(x => x.VolumeId == nodeMetadata.VolumeId)
+                .ExecuteUpdate(s => s.SetProperty(x => x.LatestEventId, eventId));
+        }
 
         if (tracked)
         {

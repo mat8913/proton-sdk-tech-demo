@@ -91,6 +91,7 @@ public sealed class NodeMetadataCacher(NodeMetadataCache cache, ProtonDriveClien
 
         var node = await _client.GetNodeAsync(new(shareId), new(nodeId), ct);
         nodeMetadata = Converters.ProtonNodeToDbModel(node);
+        _cache.OnNodeUpdate(null, nodeMetadata);
         return nodeMetadata;
     }
 
