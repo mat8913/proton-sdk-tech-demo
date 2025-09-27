@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
 using HandlebarsDotNet;
 
@@ -56,8 +55,6 @@ public sealed class NodeMetadata : IHttpModel
     public NodeType Type { get; set; }
 
     public string? Url { get; set; }
-
-    public byte[] ToJson() => JsonSerializer.SerializeToUtf8Bytes(this);
 
     public string ToHtml() => _htmlTemplate(this);
 }

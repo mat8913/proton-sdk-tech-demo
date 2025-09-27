@@ -1,4 +1,3 @@
-using System.Text.Json;
 using HandlebarsDotNet;
 
 namespace unofficial_pdrive_http_bridge.HttpModels;
@@ -32,8 +31,6 @@ public sealed class NodeChildren : IHttpModel
     public string? ShareId { get; set; }
     public string? NodeId { get; set; }
     public NodeMetadata[]? Children { get; set; }
-
-    public byte[] ToJson() => JsonSerializer.SerializeToUtf8Bytes(this);
 
     public string ToHtml() => _htmlTemplate(this);
 }

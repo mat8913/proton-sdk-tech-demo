@@ -294,22 +294,8 @@ public sealed class Program(
                 var model = await func(ctx);
                 if (model is not null)
                 {
-                    // TODO: match wildcards
-                    var accepts = ctx.Request.Headers["Accept"]?.Split(',')
-                        .Select(MediaTypeWithQualityHeaderValue.Parse)
-                        .OrderByDescending(mt => mt.Quality.GetValueOrDefault(1))
-                        .FirstOrDefault(mt => mt.MediaType == "application/json" || mt.MediaType == "text/html");
-
-                    if (accepts is null || accepts.MediaType == "application/json")
-                    {
-                        ctx.Response.ContentType = "application/json";
-                        await ctx.Response.Send(model.ToJson());
-                    }
-                    else
-                    {
-                        ctx.Response.ContentType = "text/html";
-                        await ctx.Response.Send(model.ToHtml());
-                    }
+                    ctx.Response.ContentType = "text/html";
+                    await ctx.Response.Send(model.ToHtml());
                 }
             }
             finally
