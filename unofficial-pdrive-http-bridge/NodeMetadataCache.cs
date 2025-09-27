@@ -98,7 +98,10 @@ public sealed class NodeMetadataCache(ILogger<NodeMetadataCache> logger, Persist
             .SingleOrDefaultAsync(ct);
 
         if (trackedFolder is null)
+        {
+            _logger.LogInformation("TryGetChildren cache miss {volumeId} {nodeId}", volumeId, nodeId);
             return null;
+        }
 
         return await db.NodeMetadata
             .Where(x =>
@@ -123,9 +126,14 @@ public sealed class NodeMetadataCache(ILogger<NodeMetadataCache> logger, Persist
         using var db = _persistenceManager.GetProgramDbContext();
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
-        return await db.NodeMetadata
+        var nodeMetadata = await db.NodeMetadata
             .AsNoTracking()
             .SingleOrDefaultAsync(x => x.VolumeId == volumeId && x.NodeId == nodeId, ct);
+
+        if (nodeMetadata is null)
+            _logger.LogInformation("TryGetNodeMetadata cache miss {volumeId} {nodeId}", volumeId, nodeId);
+
+        return nodeMetadata;
     }
 
     public async Task SetChildren(string eventId, string volumeId, string nodeId, IReadOnlyList<DbModels.NodeMetadata> children, CancellationToken ct)
