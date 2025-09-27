@@ -123,7 +123,10 @@ public sealed class DbSecretsCache : ISecretsCache
             .Where(x =>
                 x.Context_HasValue == groupCacheKey.Context.HasValue &&
                 x.Context_Name == context_name &&
-                x.Context_Id == context_id)
+                x.Context_Id == context_id &&
+                x.ValueHolderName == groupCacheKey.ValueHolderName &&
+                x.ValueHolderId == groupCacheKey.ValueHolderId &&
+                x.ValueName == groupCacheKey.ValueName)
             .Join(
                 db.SecretsCacheSecrets,
                 g => new
