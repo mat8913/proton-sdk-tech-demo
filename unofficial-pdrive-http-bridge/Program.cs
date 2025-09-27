@@ -122,6 +122,11 @@ public sealed class Program(
             new Regex(@"^\/files(\/.*)?$"),
             ToHandler(OnGetNodeContentByPathRequest));
 
+        _webserver.Routes.PostAuthentication.Dynamic.Add(
+            HttpMethod.HEAD,
+            new Regex(@"^\/files(\/.*)?$"),
+            ToHandler(OnGetNodeContentByPathRequest));
+
         _webserver.Start(ct);
         Console.WriteLine($"Server started on {settings.Hostname}:{settings.Port}");
     }
@@ -221,13 +226,6 @@ public sealed class Program(
     {
         var nodeIdentity = new NodeIdentity(shareId, new(nodeMetadata.VolumeId), new(nodeMetadata.NodeId));
 
-        using var downloader = await ProtonSession!.ProtonDriveClient.WaitForFileDownloaderAsync(ctx.Token);
-        var pipe = new Pipe(new(
-            pauseWriterThreshold: RevisionWriter.DefaultBlockSize * 2,
-            resumeWriterThreshold: RevisionWriter.DefaultBlockSize));
-        await using var writerStream = pipe.Writer.AsStream();
-        await using var readerStream = pipe.Reader.AsStream();
-
         long totalSize = nodeMetadata.Size!.Value;
         long startPos = 0;
         if (RangeHeaderValue.TryParse(ctx.Request.Headers["Range"], out var range))
@@ -252,6 +250,21 @@ public sealed class Program(
         }
         ctx.Response.Headers["Accept-Ranges"] = "bytes";
         ctx.Response.ContentType = nodeMetadata.MediaType ?? "application/octet-stream";
+
+        if (ctx.Request.Method == HttpMethod.HEAD)
+        {
+            ctx.Response.ContentLength = contentSize;
+            await ctx.Response.Send();
+            return;
+        }
+
+        using var downloader = await ProtonSession!.ProtonDriveClient.WaitForFileDownloaderAsync(ctx.Token);
+        var pipe = new Pipe(new(
+            pauseWriterThreshold: RevisionWriter.DefaultBlockSize * 2,
+            resumeWriterThreshold: RevisionWriter.DefaultBlockSize));
+        await using var writerStream = pipe.Writer.AsStream();
+        await using var readerStream = pipe.Reader.AsStream();
+
         var revision = await ProtonSession.ProtonDriveClient.GetFileRevisionAsync(nodeIdentity, new(nodeMetadata.ActiveRevisionId!), ctx.Token);
         var downloadTask = Task.Run(() => downloader.DownloadAsync(nodeIdentity, revision, writerStream, (_, _) => { }, ctx.Token, startPos));
         var senderTask = ctx.Response.Send(contentSize, readerStream);
