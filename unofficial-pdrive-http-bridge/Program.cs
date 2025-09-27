@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -131,6 +132,11 @@ public sealed class Program(
             "/volumes/{volumeId}/shares/{shareId}/node-content/by-id/{nodeId}",
             ToHandler(OnGetNodeContentByIdRequest));
 
+        _webserver.Routes.PostAuthentication.Dynamic.Add(
+            HttpMethod.GET,
+            new Regex(@"^\/files(\/.*)?$"),
+            ToHandler(OnGetNodeContentByPathRequest));
+
         _webserver.Start(ct);
         Console.WriteLine($"Server started on {settings.Hostname}:{settings.Port}");
     }
@@ -159,6 +165,21 @@ public sealed class Program(
         {
             // TODO: Redirect to login
             throw new InvalidOperationException("Session not initialized");
+        }
+
+        var shareIds = await ProtonSession.ProtonDriveClient.GetShareIdsAsync(ctx.Token);
+        foreach (var shareId in shareIds)
+        {
+            var volId = "(unknown)";
+            try
+            {
+                var share = await ProtonSession.ProtonDriveClient.GetShareAsync(shareId, ctx.Token);
+                volId = share.VolumeId.Value;
+            }
+            catch
+            {
+            }
+            Console.WriteLine($"Share: {volId} {shareId}");
         }
 
         var volumes = await ProtonSession.ProtonDriveClient.GetVolumesAsync(ctx.Token);
@@ -215,45 +236,7 @@ public sealed class Program(
 
         if (nodeMetadata.IsFile)
         {
-            using var downloader = await ProtonSession.ProtonDriveClient.WaitForFileDownloaderAsync(ctx.Token);
-            var pipe = new Pipe(new(
-                pauseWriterThreshold: RevisionWriter.DefaultBlockSize * 2,
-                resumeWriterThreshold: RevisionWriter.DefaultBlockSize));
-            await using var writerStream = pipe.Writer.AsStream();
-            await using var readerStream = pipe.Reader.AsStream();
-
-            long totalSize = nodeMetadata.Size!.Value;
-            long startPos = 0;
-            if (RangeHeaderValue.TryParse(ctx.Request.Headers["Range"], out var range))
-            {
-                if (range.Ranges.Count > 1)
-                {
-                    throw new NotImplementedException("multi range not implemented");
-                }
-                startPos = range.Ranges.FirstOrDefault()?.From ?? startPos;
-            }
-            long endPos = long.Max(totalSize - 1, 0);
-            long contentSize = long.Max(totalSize - startPos, 0);
-
-            if (startPos == 0)
-            {
-                ctx.Response.StatusCode = 200;
-            }
-            else
-            {
-                ctx.Response.StatusCode = 206;
-                ctx.Response.Headers["Content-Range"] = $"bytes {startPos}-{endPos}/{totalSize}";
-            }
-            ctx.Response.Headers["Accept-Ranges"] = "bytes";
-            ctx.Response.ContentType = nodeMetadata.MediaType ?? "application/octet-stream";
-            var revision = await ProtonSession.ProtonDriveClient.GetFileRevisionAsync(nodeIdentity, new(nodeMetadata.ActiveRevisionId!), ctx.Token);
-            var downloadTask = Task.Run(() => downloader.DownloadAsync(nodeIdentity, revision, writerStream, (_, _) => { }, ctx.Token, startPos));
-            var senderTask = ctx.Response.Send(contentSize, readerStream);
-            await foreach (var t in Task.WhenEach(downloadTask, senderTask))
-            {
-                await t;
-            }
-
+            await ServeFile(ctx, nodeMetadata, new(shareId));
             return null;
         }
 
@@ -282,6 +265,108 @@ public sealed class Program(
             NodeId = nodeId,
             Children = children.ToArray(),
         };
+    }
+
+    private async Task<HttpModels.NodeChildren?> OnGetNodeContentByPathRequest(HttpContextBase ctx)
+    {
+        if (ProtonSession is null)
+        {
+            // TODO: Redirect to login
+            throw new InvalidOperationException("Session not initialized");
+        }
+
+        var path = ctx.Request.Url.Elements.Skip(1);
+        var rootNodeIdentity = ProtonSession.RootNodeIdentity;
+        var nodeMetadata = await ProtonSession.GetNodeMetadataByPathAsync(path, rootNodeIdentity, ctx.Token);
+
+        if (nodeMetadata is null)
+        {
+            ctx.Response.StatusCode = 404;
+            ctx.Response.ContentType = "text/plain";
+            await ctx.Response.Send("Not found");
+            return null;
+        }
+
+        if (nodeMetadata.IsFile)
+        {
+            await ServeFile(ctx, nodeMetadata, new(rootNodeIdentity.ShareId));
+            return null;
+        }
+
+        var children = (await ProtonSession.NodeMetadataCacher
+            .GetChildren(nodeMetadata.VolumeId, nodeMetadata.NodeId, rootNodeIdentity.ShareId.Value, ctx.Token))
+            .Select(child => Converters.DbModelNodeMetadataToHttpModel(rootNodeIdentity.ShareId.Value, child))
+            .ToList();
+
+        foreach (var child in children)
+        {
+            child.Url = string.Join('/', ctx.Request.Url.Elements.Prepend("").Append(child.Name));
+        }
+
+        if (path.Any())
+        {
+            var parentUrl = ctx.Request.Url.Elements.AsSpan()[..^1];
+            var parentNode = new HttpModels.NodeMetadata
+            {
+                NodeId = nodeMetadata.ParentNodeId,
+                Name = "(Parent Directory)",
+                State = "Active",
+                Url = '/' + string.Join('/', parentUrl),
+            };
+            children.Insert(0, parentNode);
+        }
+
+        return new()
+        {
+            VolumeId = nodeMetadata.VolumeId,
+            ShareId = rootNodeIdentity.ShareId.Value,
+            NodeId = nodeMetadata.NodeId,
+            Children = children.ToArray(),
+        };
+    }
+
+    private async Task ServeFile(HttpContextBase ctx, DbModels.NodeMetadata nodeMetadata, ShareId shareId)
+    {
+        var nodeIdentity = new NodeIdentity(shareId, new(nodeMetadata.VolumeId), new(nodeMetadata.NodeId));
+
+        using var downloader = await ProtonSession!.ProtonDriveClient.WaitForFileDownloaderAsync(ctx.Token);
+        var pipe = new Pipe(new(
+            pauseWriterThreshold: RevisionWriter.DefaultBlockSize * 2,
+            resumeWriterThreshold: RevisionWriter.DefaultBlockSize));
+        await using var writerStream = pipe.Writer.AsStream();
+        await using var readerStream = pipe.Reader.AsStream();
+
+        long totalSize = nodeMetadata.Size!.Value;
+        long startPos = 0;
+        if (RangeHeaderValue.TryParse(ctx.Request.Headers["Range"], out var range))
+        {
+            if (range.Ranges.Count > 1)
+            {
+                throw new NotImplementedException("multi range not implemented");
+            }
+            startPos = range.Ranges.FirstOrDefault()?.From ?? startPos;
+        }
+        long endPos = long.Max(totalSize - 1, 0);
+        long contentSize = long.Max(totalSize - startPos, 0);
+
+        if (startPos == 0)
+        {
+            ctx.Response.StatusCode = 200;
+        }
+        else
+        {
+            ctx.Response.StatusCode = 206;
+            ctx.Response.Headers["Content-Range"] = $"bytes {startPos}-{endPos}/{totalSize}";
+        }
+        ctx.Response.Headers["Accept-Ranges"] = "bytes";
+        ctx.Response.ContentType = nodeMetadata.MediaType ?? "application/octet-stream";
+        var revision = await ProtonSession.ProtonDriveClient.GetFileRevisionAsync(nodeIdentity, new(nodeMetadata.ActiveRevisionId!), ctx.Token);
+        var downloadTask = Task.Run(() => downloader.DownloadAsync(nodeIdentity, revision, writerStream, (_, _) => { }, ctx.Token, startPos));
+        var senderTask = ctx.Response.Send(contentSize, readerStream);
+        await foreach (var t in Task.WhenEach(downloadTask, senderTask))
+        {
+            await t;
+        }
     }
 
     private async Task OnAuthenticateRequest(HttpContextBase ctx)
