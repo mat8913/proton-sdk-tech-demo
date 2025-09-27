@@ -279,11 +279,21 @@ public sealed class Program(
         var rootNodeIdentity = ProtonSession.RootNodeIdentity;
         var nodeMetadata = await ProtonSession.GetNodeMetadataByPathAsync(path, rootNodeIdentity, ctx.Token);
 
-        if (nodeMetadata is null)
+        if (nodeMetadata is null || nodeMetadata.IsFile && ctx.Request.Url.Full.EndsWith('/'))
         {
             ctx.Response.StatusCode = 404;
             ctx.Response.ContentType = "text/plain";
             await ctx.Response.Send("Not found");
+            return null;
+        }
+
+        if (!nodeMetadata.IsFile && !ctx.Request.Url.Full.EndsWith('/'))
+        {
+            var redir = ctx.Request.Url.Full + '/';
+            ctx.Response.StatusCode = 302;
+            ctx.Response.ContentType = "text/plain";
+            ctx.Response.Headers["Location"] = redir;
+            await ctx.Response.Send(redir);
             return null;
         }
 
@@ -301,6 +311,11 @@ public sealed class Program(
         foreach (var child in children)
         {
             child.Url = string.Join('/', ctx.Request.Url.Elements.Prepend("").Append(child.Name));
+            if (child.Type == HttpModels.NodeType.Folder)
+            {
+                child.Name += '/';
+                child.Url += '/';
+            }
         }
 
         if (path.Any())
@@ -311,7 +326,7 @@ public sealed class Program(
                 NodeId = nodeMetadata.ParentNodeId,
                 Name = "(Parent Directory)",
                 State = "Active",
-                Url = '/' + string.Join('/', parentUrl),
+                Url = '/' + string.Join('/', parentUrl) + '/',
             };
             children.Insert(0, parentNode);
         }
