@@ -1,4 +1,3 @@
-using System;
 using Proton.Sdk.Drive;
 
 namespace unofficial_pdrive_http_bridge;
@@ -45,35 +44,6 @@ public static class Converters
         else
         {
             metadata.Type = HttpModels.NodeType.Folder;
-        }
-
-        return metadata;
-    }
-
-    public static HttpModels.NodeMetadata ProtonNodeToHttpModel(string volumeId, string shareId, INode node)
-    {
-        var metadata = new HttpModels.NodeMetadata
-        {
-            NodeId = node.NodeIdentity.NodeId.Value,
-            Name = node.Name,
-            ParentId = node.ParentId?.Value,
-            State = node.State.ToString(),
-            Url = $"/volumes/{volumeId}/shares/{shareId}/node-content/by-id/{node.NodeIdentity.NodeId.Value}",
-        };
-
-        if (node is FileNode fileNode)
-        {
-            metadata.ActiveRevisionId = fileNode.ActiveRevision?.RevisionId?.Value;
-            metadata.Size = fileNode.ActiveRevision?.Size;
-            metadata.Type = HttpModels.NodeType.File;
-        }
-        else if (node is FolderNode)
-        {
-            metadata.Type = HttpModels.NodeType.Folder;
-        }
-        else
-        {
-            throw new InvalidOperationException($"Unknown node type: {node.GetType()}");
         }
 
         return metadata;

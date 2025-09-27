@@ -117,21 +117,6 @@ public sealed class Program(
 
         _webserver.Routes.AuthenticateRequest = OnAuthenticateRequest;
 
-        _webserver.Routes.PostAuthentication.Static.Add(
-            HttpMethod.GET,
-            "/volumes",
-            ToHandler(OnGetVolumesRequest));
-
-        _webserver.Routes.PostAuthentication.Parameter.Add(
-            HttpMethod.GET,
-            "/volumes/{volumeId}/shares/{shareId}/node-metadata/by-id/{nodeId}",
-            ToHandler(OnGetNodeMetadataByIdRequest));
-
-        _webserver.Routes.PostAuthentication.Parameter.Add(
-            HttpMethod.GET,
-            "/volumes/{volumeId}/shares/{shareId}/node-content/by-id/{nodeId}",
-            ToHandler(OnGetNodeContentByIdRequest));
-
         _webserver.Routes.PostAuthentication.Dynamic.Add(
             HttpMethod.GET,
             new Regex(@"^\/files(\/.*)?$"),
@@ -157,114 +142,6 @@ public sealed class Program(
     {
         ctx.Response.StatusCode = 404;
         await ctx.Response.Send("Not found.");
-    }
-
-    private async Task<HttpModels.VolumeList?> OnGetVolumesRequest(HttpContextBase ctx)
-    {
-        if (ProtonSession is null)
-        {
-            // TODO: Redirect to login
-            throw new InvalidOperationException("Session not initialized");
-        }
-
-        var shareIds = await ProtonSession.ProtonDriveClient.GetShareIdsAsync(ctx.Token);
-        foreach (var shareId in shareIds)
-        {
-            var volId = "(unknown)";
-            try
-            {
-                var share = await ProtonSession.ProtonDriveClient.GetShareAsync(shareId, ctx.Token);
-                volId = share.VolumeId.Value;
-            }
-            catch
-            {
-            }
-            Console.WriteLine($"Share: {volId} {shareId}");
-        }
-
-        var volumes = await ProtonSession.ProtonDriveClient.GetVolumesAsync(ctx.Token);
-        var modelVolumes = volumes
-            .Select(volume => new HttpModels.Volume
-            {
-                Id = volume.Id.Value,
-                RootShareId = volume.RootShareId.Value,
-                State = volume.State.ToString(),
-                MaxSpace = volume.MaxSpace,
-            })
-            .ToArray();
-        var modelVolumeList = new HttpModels.VolumeList
-        {
-            Volumes = modelVolumes,
-        };
-
-        return modelVolumeList;
-    }
-
-    private async Task<HttpModels.NodeMetadata?> OnGetNodeMetadataByIdRequest(HttpContextBase ctx)
-    {
-        if (ProtonSession is null)
-        {
-            // TODO: Redirect to login
-            throw new InvalidOperationException("Session not initialized");
-        }
-
-        var volumeId = ctx.Request.Url.Parameters["volumeId"] ?? throw new ArgumentNullException("volumeId");
-        var shareId = ctx.Request.Url.Parameters["shareId"] ?? throw new ArgumentNullException("shareId");
-        var nodeId = ctx.Request.Url.Parameters["nodeId"] ?? throw new ArgumentNullException("nodeId");
-
-        var node = await ProtonSession.ProtonDriveClient.GetNodeAsync(new(shareId), new(nodeId), ctx.Token);
-
-        var metadata = Converters.ProtonNodeToHttpModel(volumeId, shareId, node);
-
-        return metadata;
-    }
-
-    private async Task<HttpModels.NodeChildren?> OnGetNodeContentByIdRequest(HttpContextBase ctx)
-    {
-        if (ProtonSession is null)
-        {
-            // TODO: Redirect to login
-            throw new InvalidOperationException("Session not initialized");
-        }
-
-        var volumeId = ctx.Request.Url.Parameters["volumeId"] ?? throw new ArgumentNullException("volumeId");
-        var shareId = ctx.Request.Url.Parameters["shareId"] ?? throw new ArgumentNullException("shareId");
-        var nodeId = ctx.Request.Url.Parameters["nodeId"] ?? throw new ArgumentNullException("nodeId");
-
-        var nodeIdentity = new NodeIdentity(new(shareId), new(volumeId), new(nodeId));
-        var nodeMetadata = await ProtonSession.NodeMetadataCacher.GetNodeMetadata(volumeId, nodeId, shareId, ctx.Token);
-
-        if (nodeMetadata.IsFile)
-        {
-            await ServeFile(ctx, nodeMetadata, new(shareId));
-            return null;
-        }
-
-        var children = (await ProtonSession.NodeMetadataCacher
-            .GetChildren(nodeIdentity.VolumeId.Value, nodeIdentity.NodeId.Value, nodeIdentity.ShareId.Value, ctx.Token))
-            .Select(child => Converters.DbModelNodeMetadataToHttpModel(shareId, child));
-
-        if (!string.IsNullOrEmpty(nodeMetadata.ParentNodeId))
-        {
-            var parentNode = new FolderNode
-            {
-                NodeIdentity = new()
-                {
-                    NodeId = new(nodeMetadata.ParentNodeId),
-                },
-                Name = "(Parent Directory)",
-                State = NodeState.Active,
-            };
-            children = children.Prepend(Converters.ProtonNodeToHttpModel(volumeId, shareId, parentNode));
-        }
-
-        return new()
-        {
-            VolumeId = volumeId,
-            ShareId = shareId,
-            NodeId = nodeId,
-            Children = children.ToArray(),
-        };
     }
 
     private async Task<HttpModels.NodeChildren?> OnGetNodeContentByPathRequest(HttpContextBase ctx)
