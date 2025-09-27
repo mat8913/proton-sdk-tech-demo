@@ -192,12 +192,11 @@ public sealed class Program(
 
         foreach (var child in children)
         {
-            child.Url = string.Join('/', ctx.Request.Url.Elements.Prepend("").Append(child.Name));
             if (child.Type == HttpModels.NodeType.Folder)
             {
                 child.Name += '/';
-                child.Url += '/';
             }
+            child.Url = child.Name;
         }
 
         if (path.Any())
@@ -208,7 +207,7 @@ public sealed class Program(
                 NodeId = nodeMetadata.ParentNodeId,
                 Name = "(Parent Directory)",
                 State = "Active",
-                Url = '/' + string.Join('/', parentUrl) + '/',
+                Url = "../",
             };
             children.Insert(0, parentNode);
         }
