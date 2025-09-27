@@ -25,7 +25,8 @@ public sealed class Program(
     IOptions<Settings> settings,
     PersistenceManager persistenceManager,
     ProtonSessionManager protonSessionManager,
-    WebUiPasswordStorage webUiPasswordStorage)
+    WebUiPasswordStorage webUiPasswordStorage,
+    NodeMetadataCache nodeCache)
     : IHostedService, IDisposable
 {
     private readonly ILoggerFactory _loggerFactory = loggerFactory;
@@ -33,6 +34,7 @@ public sealed class Program(
     private readonly PersistenceManager _persistenceManager = persistenceManager;
     private readonly ProtonSessionManager _protonSessionManager = protonSessionManager;
     private readonly WebUiPasswordStorage _webUiPasswordStorage = webUiPasswordStorage;
+    private readonly NodeMetadataCache _nodeCache = nodeCache;
     private WebserverLite? _webserver;
     private int _connectionCount;
 
@@ -95,6 +97,11 @@ public sealed class Program(
         }
 
         await EnsurePassword(ct);
+
+        if (_settings.Value.ResetCache)
+        {
+            await _nodeCache.Reset(ct);
+        }
 
         await _protonSessionManager.Start(ct);
 

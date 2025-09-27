@@ -5,11 +5,13 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace unofficial_pdrive_http_bridge;
 
-public sealed class NodeMetadataCache(PersistenceManager persistenceManager)
+public sealed class NodeMetadataCache(ILogger<NodeMetadataCache> logger, PersistenceManager persistenceManager)
 {
+    private readonly ILogger<NodeMetadataCache> _logger = logger;
     private readonly PersistenceManager _persistenceManager = persistenceManager;
 
     public void OnNodeUpdate(string? eventId, DbModels.NodeMetadata nodeMetadata)
@@ -148,6 +150,21 @@ public sealed class NodeMetadataCache(PersistenceManager persistenceManager)
         await db.NodeMetadata.Where(x => x.VolumeId == volumeId && x.ParentNodeId == nodeId).ExecuteDeleteAsync(ct);
 
         await db.NodeMetadata.AddRangeAsync(children, ct);
+
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+    }
+
+    public async Task Reset(CancellationToken ct)
+    {
+        _logger.LogWarning("Resetting cache");
+
+        using var db = _persistenceManager.GetProgramDbContext();
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
+
+        await db.NodeMetadata.ExecuteDeleteAsync(ct);
+        await db.TrackedFolders.ExecuteDeleteAsync(ct);
+        await db.TrackedVolumes.ExecuteDeleteAsync(ct);
 
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
