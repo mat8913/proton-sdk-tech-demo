@@ -1,3 +1,4 @@
+using System;
 using Proton.Sdk.Drive;
 
 namespace unofficial_pdrive_http_bridge;
@@ -24,17 +25,13 @@ public static class Converters
         };
     }
 
-    public static HttpModels.NodeMetadata DbModelNodeMetadataToHttpModel(string shareId, DbModels.NodeMetadata node)
+    public static HttpModels.NodeMetadata DbModelNodeMetadataToHttpModel(DbModels.NodeMetadata node)
     {
         var metadata = new HttpModels.NodeMetadata
         {
-            NodeId = node.NodeId,
             Name = node.Name,
-            ParentId = string.IsNullOrEmpty(node.ParentNodeId) ? null : node.ParentNodeId,
-            State = "Active",
-            ActiveRevisionId = node.ActiveRevisionId,
             Size = node.Size,
-            Url = $"/volumes/{node.VolumeId}/shares/{shareId}/node-content/by-id/{node.NodeId}",
+            Url = node.Name,
         };
 
         if (node.IsFile)
@@ -44,6 +41,13 @@ public static class Converters
         else
         {
             metadata.Type = HttpModels.NodeType.Folder;
+            metadata.Name += '/';
+            metadata.Url += '/';
+        }
+
+        if (node.ModificationTime.HasValue)
+        {
+            metadata.LastModified = DateTimeOffset.FromUnixTimeSeconds(node.ModificationTime.Value).UtcDateTime;
         }
 
         return metadata;

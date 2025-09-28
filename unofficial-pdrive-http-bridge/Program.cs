@@ -187,36 +187,23 @@ public sealed class Program(
 
         var children = (await ProtonSession.NodeMetadataCacher
             .GetChildren(nodeMetadata.VolumeId, nodeMetadata.NodeId, rootNodeIdentity.ShareId.Value, ctx.Token))
-            .Select(child => Converters.DbModelNodeMetadataToHttpModel(rootNodeIdentity.ShareId.Value, child))
-            .ToList();
-
-        foreach (var child in children)
-        {
-            if (child.Type == HttpModels.NodeType.Folder)
-            {
-                child.Name += '/';
-            }
-            child.Url = child.Name;
-        }
+            .Select(Converters.DbModelNodeMetadataToHttpModel);
 
         if (path.Any())
         {
             var parentUrl = ctx.Request.Url.Elements.AsSpan()[..^1];
             var parentNode = new HttpModels.NodeMetadata
             {
-                NodeId = nodeMetadata.ParentNodeId,
                 Name = "(Parent Directory)",
-                State = "Active",
+                Type = HttpModels.NodeType.Folder,
                 Url = "../",
             };
-            children.Insert(0, parentNode);
+            children = children.Prepend(parentNode);
         }
 
         return new()
         {
-            VolumeId = nodeMetadata.VolumeId,
-            ShareId = rootNodeIdentity.ShareId.Value,
-            NodeId = nodeMetadata.NodeId,
+            Path = '/' + string.Join('/', path),
             Children = children.ToArray(),
         };
     }
