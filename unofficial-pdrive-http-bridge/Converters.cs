@@ -31,8 +31,10 @@ public static class Converters
         {
             Name = node.Name,
             Size = node.Size,
-            Url = node.Name,
+            Url = Uri.EscapeDataString(node.Name),
         };
+
+        Console.WriteLine(metadata.Url);
 
         if (node.IsFile)
         {
