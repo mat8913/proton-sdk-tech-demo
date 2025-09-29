@@ -192,7 +192,6 @@ public sealed class Program(
 
         if (path.Any())
         {
-            var parentUrl = ctx.Request.Url.Elements.AsSpan()[..^1];
             var parentNode = new HttpModels.NodeMetadata
             {
                 Name = "(Parent Directory)",
