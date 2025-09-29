@@ -158,6 +158,7 @@ public sealed class Program(
             throw new InvalidOperationException("Session not initialized");
         }
 
+        // TODO: Decode manually to allow '+' to remain instead of being decoded as ' '.
         var path = ctx.Request.Url.Elements.Skip(1);
         var rootNodeIdentity = ProtonSession.RootNodeIdentity;
         var nodeMetadata = await ProtonSession.GetNodeMetadataByPathAsync(path, rootNodeIdentity, ctx.Token);
