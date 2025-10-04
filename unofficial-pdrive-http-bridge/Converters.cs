@@ -21,7 +21,7 @@ public static class Converters
             MediaType = fileNode?.MediaType,
             ActiveRevisionId = fileNode?.ActiveRevision.RevisionId.Value,
             Size = fileNode?.ActiveRevision.Size,
-            ModificationTime = fileNode?.ActiveRevision.CreationTime,
+            ModificationTime = node.ModificationTime,
         };
     }
 
