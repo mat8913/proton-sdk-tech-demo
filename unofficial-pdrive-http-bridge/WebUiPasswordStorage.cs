@@ -11,7 +11,7 @@ public sealed class WebUiPasswordStorage(PersistenceManager persistenceManager)
 {
     private readonly PersistenceManager _persistenceManager = persistenceManager;
 
-    public async Task<(bool, string)> GetPassword(CancellationToken ct)
+    public async Task<(bool, string)> GetPasswordAsync(CancellationToken ct)
     {
         await using var db = _persistenceManager.GetProgramDbContext();
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
@@ -32,7 +32,7 @@ public sealed class WebUiPasswordStorage(PersistenceManager persistenceManager)
         return (false, modelPassword.Password);
     }
 
-    public async Task<string> ResetPassword(CancellationToken ct)
+    public async Task<string> ResetPasswordAsync(CancellationToken ct)
     {
         await using var db = _persistenceManager.GetProgramDbContext();
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);

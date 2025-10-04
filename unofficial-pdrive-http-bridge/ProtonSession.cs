@@ -20,7 +20,7 @@ public sealed class ProtonSession(
     public NodeMetadataCacher NodeMetadataCacher { get; } = nodeMetadataCacher;
     public NodeIdentity RootNodeIdentity => _rootNodeIdentity! ?? throw new InvalidOperationException("not initialized");
 
-    public async Task Start(CancellationToken ct)
+    public async Task StartAsync(CancellationToken ct)
     {
         await NodeMetadataCacher.StartAsync(ct);
 
@@ -35,7 +35,7 @@ public sealed class ProtonSession(
     {
         start ??= RootNodeIdentity;
 
-        var node = await NodeMetadataCacher.GetNodeMetadata(
+        var node = await NodeMetadataCacher.GetNodeMetadataAsync(
             start.VolumeId.Value,
             start.NodeId.Value,
             start.ShareId.Value,
@@ -43,7 +43,7 @@ public sealed class ProtonSession(
 
         foreach (var pathElem in path)
         {
-            var children = await NodeMetadataCacher.GetChildren(node.VolumeId, node.NodeId, start.ShareId.Value, ct);
+            var children = await NodeMetadataCacher.GetChildrenAsync(node.VolumeId, node.NodeId, start.ShareId.Value, ct);
             node = children.SingleOrDefault(x => x.Name == pathElem);
             if (node is null)
             {

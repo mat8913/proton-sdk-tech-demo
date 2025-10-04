@@ -15,7 +15,7 @@ public sealed class SessionStorage
         _persistenceManager = persistenceManager;
     }
 
-    public async Task StoreSession(StoredSession session, CancellationToken ct)
+    public async Task StoreSessionAsync(StoredSession session, CancellationToken ct)
     {
         await using var db = _persistenceManager.GetProgramDbContext();
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
@@ -42,7 +42,7 @@ public sealed class SessionStorage
         await transaction.CommitAsync(ct);
     }
 
-    public async Task<StoredSession?> TryLoadSession(CancellationToken ct)
+    public async Task<StoredSession?> TryLoadSessionAsync(CancellationToken ct)
     {
         await using var db = _persistenceManager.GetProgramDbContext();
         await using var transaction = await db.Database.BeginTransactionAsync(ct);

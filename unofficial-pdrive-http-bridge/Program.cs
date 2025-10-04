@@ -99,50 +99,50 @@ public sealed class Program(
             await db.SaveChangesAsync(ct);
         }
 
-        await EnsurePassword(ct);
+        await EnsurePasswordAsync(ct);
 
         if (_settings.Value.ResetCache)
         {
-            await _nodeCache.Reset(ct);
+            await _nodeCache.ResetAsync(ct);
         }
 
-        await _protonSessionManager.Start(ct);
+        await _protonSessionManager.StartAsync(ct);
 
         var webserverLogger = _loggerFactory.CreateLogger<WebserverLite>();
         WebserverSettings settings = new WebserverSettings(_settings.Value.Hostname ?? "127.0.0.1", _settings.Value.Port ?? 9000);
         settings.Debug.Requests = true;
         settings.Debug.Responses = true;
-        _webserver = new WebserverLite(settings, OnDefaultRoute);
+        _webserver = new WebserverLite(settings, OnDefaultRouteAsync);
         _webserver.Events.Logger = msg => webserverLogger.LogInformation("{msg}", msg);
         _webserver.Events.ExceptionEncountered += (_, ex) =>
             webserverLogger.LogError(ex.Exception, "Exception handling {url}: {ex}", ex.Url, ex.Exception);
 
-        _webserver.Routes.AuthenticateRequest = OnAuthenticateRequest;
+        _webserver.Routes.AuthenticateRequest = OnAuthenticateRequestAsync;
 
         _webserver.Routes.PostAuthentication.Static.Add(
             HttpMethod.GET,
             "/",
-            ToHandler(OnGetRootRequest));
+            ToHandler(OnGetRootRequestAsync));
 
         _webserver.Routes.PostAuthentication.Static.Add(
             HttpMethod.GET,
             "/login",
-            ToHandler(OnGetLoginRequest));
+            ToHandler(OnGetLoginRequestAsync));
 
         _webserver.Routes.PostAuthentication.Static.Add(
             HttpMethod.POST,
             "/login",
-            ToHandler(OnPostLoginRequest));
+            ToHandler(OnPostLoginRequestAsync));
 
         _webserver.Routes.PostAuthentication.Dynamic.Add(
             HttpMethod.GET,
             new Regex(@"^\/files(\/.*)?$"),
-            ToHandler(OnGetNodeContentByPathRequest));
+            ToHandler(OnGetNodeContentByPathRequestAsync));
 
         _webserver.Routes.PostAuthentication.Dynamic.Add(
             HttpMethod.HEAD,
             new Regex(@"^\/files(\/.*)?$"),
-            ToHandler(OnGetNodeContentByPathRequest));
+            ToHandler(OnGetNodeContentByPathRequestAsync));
 
         _webserver.Start(ct);
         Console.WriteLine($"Server started on {settings.Hostname}:{settings.Port}");
@@ -160,23 +160,23 @@ public sealed class Program(
         _webserver?.Dispose();
     }
 
-    private async Task OnDefaultRoute(HttpContextBase ctx)
+    private async Task OnDefaultRouteAsync(HttpContextBase ctx)
     {
         ctx.Response.StatusCode = 404;
         await ctx.Response.Send("Not found.");
     }
 
-    private async Task<HttpModels.RootPage?> OnGetRootRequest(HttpContextBase ctx)
+    private async Task<HttpModels.RootPage?> OnGetRootRequestAsync(HttpContextBase ctx)
     {
         return new HttpModels.RootPage();
     }
 
-    private async Task<HttpModels.LoginForm?> OnGetLoginRequest(HttpContextBase ctx)
+    private async Task<HttpModels.LoginForm?> OnGetLoginRequestAsync(HttpContextBase ctx)
     {
         return new HttpModels.LoginForm();
     }
 
-    private async Task<HttpModels.LoginResult?> OnPostLoginRequest(HttpContextBase ctx)
+    private async Task<HttpModels.LoginResult?> OnPostLoginRequestAsync(HttpContextBase ctx)
     {
         var qs = HttpUtility.ParseQueryString(ctx.Request.DataAsString);
         var username = qs["username"] ?? "";
@@ -185,7 +185,7 @@ public sealed class Program(
 
         try
         {
-            await _protonSessionManager.Login(username, password, otp, ctx.Token);
+            await _protonSessionManager.LoginAsync(username, password, otp, ctx.Token);
         }
         catch (Exception ex)
         {
@@ -202,7 +202,7 @@ public sealed class Program(
         };
     }
 
-    private async Task<HttpModels.NodeChildren?> OnGetNodeContentByPathRequest(HttpContextBase ctx)
+    private async Task<HttpModels.NodeChildren?> OnGetNodeContentByPathRequestAsync(HttpContextBase ctx)
     {
         if (ProtonSession is null)
         {
@@ -239,12 +239,12 @@ public sealed class Program(
 
         if (nodeMetadata.IsFile)
         {
-            await ServeFile(ctx, nodeMetadata, new(rootNodeIdentity.ShareId));
+            await ServeFileAsync(ctx, nodeMetadata, new(rootNodeIdentity.ShareId));
             return null;
         }
 
         var children = (await ProtonSession.NodeMetadataCacher
-            .GetChildren(nodeMetadata.VolumeId, nodeMetadata.NodeId, rootNodeIdentity.ShareId.Value, ctx.Token))
+            .GetChildrenAsync(nodeMetadata.VolumeId, nodeMetadata.NodeId, rootNodeIdentity.ShareId.Value, ctx.Token))
             .Select(Converters.DbModelNodeMetadataToHttpModel);
 
         if (path.Any())
@@ -265,13 +265,13 @@ public sealed class Program(
         };
     }
 
-    private async Task ServeFile(HttpContextBase ctx, DbModels.NodeMetadata nodeMetadata, ShareId shareId)
+    private async Task ServeFileAsync(HttpContextBase ctx, DbModels.NodeMetadata nodeMetadata, ShareId shareId)
     {
         var nodeIdentity = new NodeIdentity(shareId, new(nodeMetadata.VolumeId), new(nodeMetadata.NodeId));
 
         long totalSize = nodeMetadata.Size!.Value;
 
-        async Task RangeNotSatisfiable()
+        async Task RangeNotSatisfiableAsync()
         {
             ctx.Response.StatusCode = 416;
             ctx.Response.Headers["Content-Range"] = $"bytes */{totalSize}";
@@ -286,7 +286,7 @@ public sealed class Program(
         {
             if (range.Ranges.Count > 1)
             {
-                await RangeNotSatisfiable();
+                await RangeNotSatisfiableAsync();
                 return;
             }
 
@@ -296,7 +296,7 @@ public sealed class Program(
 
             if (startPos < 0 || startPos > endPos || endPos >= totalSize || contentSize < 0)
             {
-                await RangeNotSatisfiable();
+                await RangeNotSatisfiableAsync();
                 return;
             }
 
@@ -343,13 +343,13 @@ public sealed class Program(
         }
     }
 
-    private async Task OnAuthenticateRequest(HttpContextBase ctx)
+    private async Task OnAuthenticateRequestAsync(HttpContextBase ctx)
     {
         // Set response timeout
         var stream = Utils.GetResponseStream(ctx.Response);
         stream.WriteTimeout = 5000;
 
-        var (_, expectedPassword) = await _webUiPasswordStorage.GetPassword(ctx.Token);
+        var (_, expectedPassword) = await _webUiPasswordStorage.GetPasswordAsync(ctx.Token);
         var expectedPasswordBytes = Encoding.UTF8.GetBytes(expectedPassword);
 
         var gotPassword = ctx.Request.Authorization.Password ?? "";
@@ -388,7 +388,7 @@ public sealed class Program(
         };
     }
 
-    private async Task EnsurePassword(CancellationToken ct)
+    private async Task EnsurePasswordAsync(CancellationToken ct)
     {
         bool exists;
         string password;
@@ -396,11 +396,11 @@ public sealed class Program(
         if (_settings.Value.ResetPassword)
         {
             exists = false;
-            password = await _webUiPasswordStorage.ResetPassword(ct);
+            password = await _webUiPasswordStorage.ResetPasswordAsync(ct);
         }
         else
         {
-            (exists, password) = await _webUiPasswordStorage.GetPassword(ct);
+            (exists, password) = await _webUiPasswordStorage.GetPasswordAsync(ct);
         }
 
         if (!exists)

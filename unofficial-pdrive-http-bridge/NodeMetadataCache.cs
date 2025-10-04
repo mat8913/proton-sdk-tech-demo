@@ -85,7 +85,7 @@ public sealed class NodeMetadataCache(ILogger<NodeMetadataCache> logger, Persist
         transaction.Commit();
     }
 
-    public async Task<List<DbModels.NodeMetadata>?> TryGetChildren(string volumeId, string nodeId, CancellationToken ct)
+    public async Task<List<DbModels.NodeMetadata>?> TryGetChildrenAsync(string volumeId, string nodeId, CancellationToken ct)
     {
         using var db = _persistenceManager.GetProgramDbContext();
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
@@ -111,7 +111,7 @@ public sealed class NodeMetadataCache(ILogger<NodeMetadataCache> logger, Persist
             .ToListAsync(ct);
     }
 
-    public async Task<List<DbModels.TrackedVolume>> GetVolumes(CancellationToken ct)
+    public async Task<List<DbModels.TrackedVolume>> GetVolumesAsync(CancellationToken ct)
     {
         using var db = _persistenceManager.GetProgramDbContext();
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
@@ -121,7 +121,7 @@ public sealed class NodeMetadataCache(ILogger<NodeMetadataCache> logger, Persist
             .ToListAsync(ct);
     }
 
-    public async Task<DbModels.NodeMetadata?> TryGetNodeMetadata(string volumeId, string nodeId, CancellationToken ct)
+    public async Task<DbModels.NodeMetadata?> TryGetNodeMetadataAsync(string volumeId, string nodeId, CancellationToken ct)
     {
         using var db = _persistenceManager.GetProgramDbContext();
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
@@ -136,7 +136,7 @@ public sealed class NodeMetadataCache(ILogger<NodeMetadataCache> logger, Persist
         return nodeMetadata;
     }
 
-    public async Task SetChildren(string eventId, string volumeId, string nodeId, IReadOnlyList<DbModels.NodeMetadata> children, CancellationToken ct)
+    public async Task SetChildrenAsync(string eventId, string volumeId, string nodeId, IReadOnlyList<DbModels.NodeMetadata> children, CancellationToken ct)
     {
         foreach (var child in children)
         {
@@ -165,7 +165,7 @@ public sealed class NodeMetadataCache(ILogger<NodeMetadataCache> logger, Persist
         await transaction.CommitAsync(ct);
     }
 
-    public async Task Reset(CancellationToken ct)
+    public async Task ResetAsync(CancellationToken ct)
     {
         _logger.LogWarning("Resetting cache");
 

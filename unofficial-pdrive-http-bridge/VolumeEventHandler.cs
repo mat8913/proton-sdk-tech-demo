@@ -34,7 +34,7 @@ public sealed class VolumeEventHandler
         _channel.Start();
     }
 
-    public async Task Stop()
+    public async Task StopAsync()
     {
         await _channel.StopAsync();
     }

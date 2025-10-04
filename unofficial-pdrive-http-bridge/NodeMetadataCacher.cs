@@ -22,7 +22,7 @@ public sealed class NodeMetadataCacher(NodeMetadataCache cache, ProtonDriveClien
         await _sync.WaitAsync(ct);
         try
         {
-            var volumes = await _cache.GetVolumes(ct);
+            var volumes = await _cache.GetVolumesAsync(ct);
             foreach (var volume in volumes)
             {
                 if (_volumeEventHandlers.ContainsKey(volume.VolumeId))
@@ -46,20 +46,20 @@ public sealed class NodeMetadataCacher(NodeMetadataCache cache, ProtonDriveClien
         }
     }
 
-    public async Task<List<DbModels.NodeMetadata>> GetChildren(string volumeId, string nodeId, string shareId, CancellationToken ct)
+    public async Task<List<DbModels.NodeMetadata>> GetChildrenAsync(string volumeId, string nodeId, string shareId, CancellationToken ct)
     {
         if (!_started)
             throw new InvalidOperationException("NodeMetadataCacher not started");
 
-        var children = await _cache.TryGetChildren(volumeId, nodeId, ct);
+        var children = await _cache.TryGetChildrenAsync(volumeId, nodeId, ct);
         if (children is not null)
             return children;
 
         await _sync.WaitAsync(ct);
         try
         {
-            var handler = await EnsureVolumeEventHandler(volumeId, ct);
-            await handler.Stop();
+            var handler = await EnsureVolumeEventHandlerAsync(volumeId, ct);
+            await handler.StopAsync();
 
             try
             {
@@ -68,7 +68,7 @@ public sealed class NodeMetadataCacher(NodeMetadataCache cache, ProtonDriveClien
                     .OrderBy(x => x.Name, StringComparer.Ordinal)
                     .ToListAsync(ct);
 
-                await _cache.SetChildren(handler.EventId, volumeId, nodeId, children, ct);
+                await _cache.SetChildrenAsync(handler.EventId, volumeId, nodeId, children, ct);
 
                 return children;
             }
@@ -83,9 +83,9 @@ public sealed class NodeMetadataCacher(NodeMetadataCache cache, ProtonDriveClien
         }
     }
 
-    public async Task<DbModels.NodeMetadata> GetNodeMetadata(string volumeId, string nodeId, string shareId, CancellationToken ct)
+    public async Task<DbModels.NodeMetadata> GetNodeMetadataAsync(string volumeId, string nodeId, string shareId, CancellationToken ct)
     {
-        var nodeMetadata = await _cache.TryGetNodeMetadata(volumeId, nodeId, ct);
+        var nodeMetadata = await _cache.TryGetNodeMetadataAsync(volumeId, nodeId, ct);
         if (nodeMetadata is not null)
             return nodeMetadata;
 
@@ -95,9 +95,9 @@ public sealed class NodeMetadataCacher(NodeMetadataCache cache, ProtonDriveClien
         await _sync.WaitAsync();
         try
         {
-            var handler = await EnsureVolumeEventHandler(volumeId, ct);
+            var handler = await EnsureVolumeEventHandlerAsync(volumeId, ct);
 
-            await handler.Stop();
+            await handler.StopAsync();
             try
             {
                 _cache.OnNodeUpdate(handler.EventId, nodeMetadata);
@@ -116,7 +116,7 @@ public sealed class NodeMetadataCacher(NodeMetadataCache cache, ProtonDriveClien
     }
 
     // assumes lock is already taken
-    private async Task<VolumeEventHandler> EnsureVolumeEventHandler(string volumeId, CancellationToken ct)
+    private async Task<VolumeEventHandler> EnsureVolumeEventHandlerAsync(string volumeId, CancellationToken ct)
     {
         if (_volumeEventHandlers.TryGetValue(volumeId, out var handler))
             return handler;

@@ -24,15 +24,15 @@ public sealed class ProtonSessionManager(
 
     public ProtonSession? ProtonSession { get; private set; }
 
-    public async Task Start(CancellationToken ct)
+    public async Task StartAsync(CancellationToken ct)
     {
         if (ProtonSession is not null)
             return;
 
-        await TryResumeSession(ct);
+        await TryResumeSessionAsync(ct);
     }
 
-    public async Task Login(string username, string password, string otpCode, CancellationToken ct)
+    public async Task LoginAsync(string username, string password, string otpCode, CancellationToken ct)
     {
         await _sync.WaitAsync();
         try
@@ -72,9 +72,9 @@ public sealed class ProtonSessionManager(
                 PasswordMode: (int)session.PasswordMode
             );
 
-            await _sessionStorage.StoreSession(storedSession, ct);
+            await _sessionStorage.StoreSessionAsync(storedSession, ct);
 
-            await SetSession(session, ct);
+            await SetSessionAsync(session, ct);
         }
         finally
         {
@@ -82,7 +82,7 @@ public sealed class ProtonSessionManager(
         }
     }
 
-    private async Task SetSession(ProtonApiSession apiSession, CancellationToken ct)
+    private async Task SetSessionAsync(ProtonApiSession apiSession, CancellationToken ct)
     {
         apiSession.TokenCredential.TokensRefreshed += (accessToken, refreshToken) =>
         {
@@ -92,11 +92,11 @@ public sealed class ProtonSessionManager(
         var client = new ProtonDriveClient(apiSession);
         var nodeMetadataCacher = ActivatorUtilities.CreateInstance<NodeMetadataCacher>(_serviceProvider, client);
         var session = new ProtonSession(apiSession, client, nodeMetadataCacher);
-        await session.Start(ct);
+        await session.StartAsync(ct);
         ProtonSession = session;
     }
 
-    private async Task TryResumeSession(CancellationToken ct)
+    private async Task TryResumeSessionAsync(CancellationToken ct)
     {
         await _sync.WaitAsync();
         try
@@ -105,7 +105,7 @@ public sealed class ProtonSessionManager(
             if (ProtonSession is not null)
                 return;
 
-            var savedSessionN = await _sessionStorage.TryLoadSession(ct);
+            var savedSessionN = await _sessionStorage.TryLoadSessionAsync(ct);
 
             if (savedSessionN is null)
                 return;
@@ -129,7 +129,7 @@ public sealed class ProtonSessionManager(
 
             var session = ProtonApiSession.Resume(sessionResumeRequest);
 
-            await SetSession(session, ct);
+            await SetSessionAsync(session, ct);
         }
         finally
         {
