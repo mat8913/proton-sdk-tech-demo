@@ -9,4 +9,5 @@ public interface INode
     string Name { get; }
     ByteString NameHashDigest { get; }
     NodeState State { get; }
+    long ModificationTime { get; }
 }

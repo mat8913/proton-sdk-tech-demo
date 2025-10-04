@@ -78,6 +78,7 @@ message FileNode {
     NodeState state = 5;
     optional Revision active_revision = 6;
     optional string media_type = 7;
+    int64 modification_time = 8;
 }
 
 message FolderNode {
@@ -86,6 +87,7 @@ message FolderNode {
     string name = 3;
     bytes name_hash_digest = 4;
     NodeState state = 5;
+    int64 modification_time = 6;
 }
 
 message NodeIdentity {

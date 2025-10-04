@@ -41,6 +41,7 @@ public class Node : INode
     public string Name { get; }
     public ByteString NameHashDigest { get; }
     public NodeState State { get; }
+    public long ModificationTime { get; }
 
     internal static async Task<INode> GetAsync(
         ProtonDriveClient client,
@@ -273,6 +274,7 @@ public class Node : INode
                 Name = name,
                 NameHashDigest = ByteStringExtensions.FromMemory(link.NameHashDigest),
                 State = state,
+                ModificationTime = new DateTimeOffset(link.ModificationTime).ToUnixTimeSeconds(),
             };
         }
 
@@ -315,7 +317,10 @@ public class Node : INode
             ByteStringExtensions.FromMemory(link.NameHashDigest),
             state,
             activeRevision,
-            link.MediaType);
+            link.MediaType)
+        {
+            ModificationTime = new DateTimeOffset(link.ModificationTime).ToUnixTimeSeconds(),
+        };
     }
 
     internal static async Task<ReadOnlyMemory<byte>> GetHashKeyAsync(
