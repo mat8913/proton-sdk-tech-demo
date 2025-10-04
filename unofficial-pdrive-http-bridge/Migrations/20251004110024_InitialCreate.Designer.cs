@@ -10,8 +10,8 @@ using unofficial_pdrive_http_bridge;
 namespace unofficial_pdrive_http_bridge.Migrations
 {
     [DbContext(typeof(ProgramDbContext))]
-    [Migration("20251004065145_NodeModificationTimeRequired")]
-    partial class NodeModificationTimeRequired
+    [Migration("20251004110024_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
