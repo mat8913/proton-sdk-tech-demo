@@ -4,7 +4,7 @@ namespace Proton.Sdk.Drive;
 
 public static class BlockUtils
 {
-    public static (int BlockNumber, int BlockIndex) GetBlockIndexFromFileIndex(IReadOnlyList<int> blockSizes, long fileIndex)
+    public static BlockIndex GetBlockIndexFromFileIndex(IReadOnlyList<int> blockSizes, long fileIndex)
     {
         long currentFileIndex = 0;
         int currentBlock = 0;
@@ -20,20 +20,22 @@ public static class BlockUtils
             currentBlock++;
         }
 
-        return (currentBlock, (int)(fileIndex - currentFileIndex));
+        return new BlockIndex(currentBlock, (int)(fileIndex - currentFileIndex));
     }
 
     public static void SelfTest()
     {
-        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 0) == (0, 0));
-        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 5) == (0, 5));
-        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 9) == (0, 9));
-        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 10) == (1, 0));
-        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 11) == (1, 1));
-        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 19) == (1, 9));
-        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 20) == (2, 0));
-        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 21) == (2, 1));
-        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 999) == (2, 979));
-        Trace.Assert(GetBlockIndexFromFileIndex([10, 5, 5], 17) == (2, 2));
+        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 0) == new BlockIndex(0, 0));
+        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 5) == new BlockIndex(0, 5));
+        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 9) == new BlockIndex(0, 9));
+        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 10) == new BlockIndex(1, 0));
+        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 11) == new BlockIndex(1, 1));
+        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 19) == new BlockIndex(1, 9));
+        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 20) == new BlockIndex(2, 0));
+        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 21) == new BlockIndex(2, 1));
+        Trace.Assert(GetBlockIndexFromFileIndex([10, 10], 999) == new BlockIndex(2, 979));
+        Trace.Assert(GetBlockIndexFromFileIndex([10, 5, 5], 17) == new BlockIndex(2, 2));
     }
 }
+
+public readonly record struct BlockIndex(int BlockNumber, int IndexWithinBlock);

@@ -17,7 +17,7 @@ public sealed class RevisionReader : IDisposable
     private readonly PgpPrivateKey _fileKey;
     private readonly PgpSessionKey _contentKey;
     private readonly RevisionResponse _revisionResponse;
-    private readonly (int BlockNumber, int BlockIndex) _startBlockIndex;
+    private readonly BlockIndex _startBlockIndex;
     private readonly Action<int> _releaseBlockListingAction;
 
     private readonly SemaphoreSlim _blockSemaphore = new(_maxParallelism, _maxParallelism);
@@ -29,7 +29,7 @@ public sealed class RevisionReader : IDisposable
         PgpPrivateKey fileKey,
         PgpSessionKey contentKey,
         RevisionResponse revisionResponse,
-        (int BlockNumber, int BlockIndex) startBlockIndex,
+        BlockIndex startBlockIndex,
         Action<int> releaseBlockListingAction)
     {
         _client = client;
@@ -135,7 +135,7 @@ public sealed class RevisionReader : IDisposable
             {
                 if (downloadResult.Index == MinBlockIndex + _startBlockIndex.BlockNumber)
                 {
-                    downloadedStream.Seek(_startBlockIndex.BlockIndex, SeekOrigin.Begin);
+                    downloadedStream.Seek(_startBlockIndex.IndexWithinBlock, SeekOrigin.Begin);
                 }
                 else
                 {
