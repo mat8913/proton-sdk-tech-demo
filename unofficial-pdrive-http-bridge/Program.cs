@@ -270,27 +270,48 @@ public sealed class Program(
         var nodeIdentity = new NodeIdentity(shareId, new(nodeMetadata.VolumeId), new(nodeMetadata.NodeId));
 
         long totalSize = nodeMetadata.Size!.Value;
-        long startPos = 0;
-        if (RangeHeaderValue.TryParse(ctx.Request.Headers["Range"], out var range))
+
+        async Task RangeNotSatisfiable()
+        {
+            ctx.Response.StatusCode = 416;
+            ctx.Response.Headers["Content-Range"] = $"bytes */{totalSize}";
+            await ctx.Response.Send();
+        }
+
+        long startPos;
+        long? endPos;
+        long contentSize;
+
+        if (totalSize > 0 && RangeHeaderValue.TryParse(ctx.Request.Headers["Range"], out var range) && range.Ranges.Count > 0)
         {
             if (range.Ranges.Count > 1)
             {
-                throw new NotImplementedException("multi range not implemented");
+                await RangeNotSatisfiable();
+                return;
             }
-            startPos = range.Ranges.FirstOrDefault()?.From ?? startPos;
-        }
-        long endPos = long.Max(totalSize - 1, 0);
-        long contentSize = long.Max(totalSize - startPos, 0);
 
-        if (startPos == 0)
-        {
-            ctx.Response.StatusCode = 200;
-        }
-        else
-        {
+            startPos = range.Ranges.FirstOrDefault()!.From ?? 0;
+            endPos = range.Ranges.FirstOrDefault()!.To ?? totalSize - 1;
+            contentSize = endPos.Value + 1 - startPos;
+
+            if (startPos < 0 || startPos > endPos || endPos >= totalSize || contentSize < 0)
+            {
+                await RangeNotSatisfiable();
+                return;
+            }
+
             ctx.Response.StatusCode = 206;
             ctx.Response.Headers["Content-Range"] = $"bytes {startPos}-{endPos}/{totalSize}";
         }
+        else
+        {
+            startPos = 0;
+            endPos = null;
+            contentSize = totalSize;
+
+            ctx.Response.StatusCode = 200;
+        }
+
         ctx.Response.Headers["Accept-Ranges"] = "bytes";
         ctx.Response.ContentType = nodeMetadata.MediaType ?? "application/octet-stream";
 
@@ -302,7 +323,7 @@ public sealed class Program(
                 .ToString("r", CultureInfo.InvariantCulture);
         }
 
-        if (ctx.Request.Method == HttpMethod.HEAD)
+        if (ctx.Request.Method == HttpMethod.HEAD || contentSize == 0)
         {
             ctx.Response.ContentLength = contentSize;
             await ctx.Response.Send();
@@ -317,7 +338,7 @@ public sealed class Program(
         await using var readerStream = pipe.Reader.AsStream();
 
         var revision = await ProtonSession.ProtonDriveClient.GetFileRevisionAsync(nodeIdentity, new(nodeMetadata.ActiveRevisionId!), ctx.Token);
-        var downloadTask = Task.Run(() => downloader.DownloadAsync(nodeIdentity, revision, writerStream, (_, _) => { }, ctx.Token, startPos));
+        var downloadTask = Task.Run(() => downloader.DownloadAsync(nodeIdentity, revision, writerStream, (_, _) => { }, ctx.Token, startPos, endPos));
         var senderTask = ctx.Response.Send(contentSize, readerStream);
         await foreach (var t in Task.WhenEach(downloadTask, senderTask))
         {
