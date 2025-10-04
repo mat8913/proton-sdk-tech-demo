@@ -206,8 +206,12 @@ public sealed class Program(
     {
         if (ProtonSession is null)
         {
-            // TODO: Redirect to login
-            throw new InvalidOperationException("Session not initialized");
+            var redir = "/login";
+            ctx.Response.StatusCode = 302;
+            ctx.Response.ContentType = "text/plain";
+            ctx.Response.Headers["Location"] = redir;
+            await ctx.Response.Send(redir);
+            return null;
         }
 
         // TODO: Decode manually to allow '+' to remain instead of being decoded as ' '.
