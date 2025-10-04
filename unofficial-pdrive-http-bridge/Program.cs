@@ -121,6 +121,11 @@ public sealed class Program(
 
         _webserver.Routes.PostAuthentication.Static.Add(
             HttpMethod.GET,
+            "/",
+            ToHandler(OnGetRootRequest));
+
+        _webserver.Routes.PostAuthentication.Static.Add(
+            HttpMethod.GET,
             "/login",
             ToHandler(OnGetLoginRequest));
 
@@ -159,6 +164,11 @@ public sealed class Program(
     {
         ctx.Response.StatusCode = 404;
         await ctx.Response.Send("Not found.");
+    }
+
+    private async Task<HttpModels.RootPage?> OnGetRootRequest(HttpContextBase ctx)
+    {
+        return new HttpModels.RootPage();
     }
 
     private async Task<HttpModels.LoginForm?> OnGetLoginRequest(HttpContextBase ctx)
