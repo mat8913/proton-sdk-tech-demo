@@ -315,13 +315,10 @@ public sealed class Program(
         ctx.Response.Headers["Accept-Ranges"] = "bytes";
         ctx.Response.ContentType = nodeMetadata.MediaType ?? "application/octet-stream";
 
-        if (nodeMetadata.ModificationTime.HasValue)
-        {
-            ctx.Response.Headers["Last-Modified"] = DateTimeOffset
-                .FromUnixTimeSeconds(nodeMetadata.ModificationTime.Value)
-                .UtcDateTime
-                .ToString("r", CultureInfo.InvariantCulture);
-        }
+        ctx.Response.Headers["Last-Modified"] = DateTimeOffset
+            .FromUnixTimeSeconds(nodeMetadata.ModificationTime)
+            .UtcDateTime
+            .ToString("r", CultureInfo.InvariantCulture);
 
         if (ctx.Request.Method == HttpMethod.HEAD || contentSize == 0)
         {

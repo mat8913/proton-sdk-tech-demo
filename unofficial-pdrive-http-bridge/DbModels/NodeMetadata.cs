@@ -16,5 +16,5 @@ public sealed class NodeMetadata
     public string? MediaType { get; set; }
     public string? ActiveRevisionId { get; set; }
     public long? Size { get; set; }
-    public long? ModificationTime { get; set; }
+    public required long ModificationTime { get; set; }
 }

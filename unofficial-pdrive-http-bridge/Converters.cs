@@ -32,6 +32,7 @@ public static class Converters
             Name = node.Name,
             Size = node.Size,
             Url = Uri.EscapeDataString(node.Name),
+            LastModified = DateTimeOffset.FromUnixTimeSeconds(node.ModificationTime).UtcDateTime,
         };
 
         if (node.IsFile)
@@ -43,11 +44,6 @@ public static class Converters
             metadata.Type = HttpModels.NodeType.Folder;
             metadata.Name += '/';
             metadata.Url += '/';
-        }
-
-        if (node.ModificationTime.HasValue)
-        {
-            metadata.LastModified = DateTimeOffset.FromUnixTimeSeconds(node.ModificationTime.Value).UtcDateTime;
         }
 
         return metadata;
