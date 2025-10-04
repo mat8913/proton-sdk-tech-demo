@@ -18,6 +18,7 @@ public sealed class RevisionReader : IDisposable
     private readonly PgpSessionKey _contentKey;
     private readonly RevisionResponse _revisionResponse;
     private readonly BlockIndex _startBlockIndex;
+    private readonly BlockIndex? _endBlockIndex;
     private readonly Action<int> _releaseBlockListingAction;
 
     private readonly SemaphoreSlim _blockSemaphore = new(_maxParallelism, _maxParallelism);
@@ -30,6 +31,7 @@ public sealed class RevisionReader : IDisposable
         PgpSessionKey contentKey,
         RevisionResponse revisionResponse,
         BlockIndex startBlockIndex,
+        BlockIndex? endBlockIndex,
         Action<int> releaseBlockListingAction)
     {
         _client = client;
@@ -39,6 +41,7 @@ public sealed class RevisionReader : IDisposable
         _contentKey = contentKey;
         _revisionResponse = revisionResponse;
         _startBlockIndex = startBlockIndex;
+        _endBlockIndex = endBlockIndex;
         _releaseBlockListingAction = releaseBlockListingAction;
     }
 
@@ -142,6 +145,15 @@ public sealed class RevisionReader : IDisposable
                     downloadedStream.Seek(0, SeekOrigin.Begin);
                 }
 
+                if (_endBlockIndex.HasValue && downloadResult.Index == MinBlockIndex + _endBlockIndex.Value.BlockNumber)
+                {
+                    var wantedLength = _endBlockIndex.Value.IndexWithinBlock + 1;
+                    if (downloadedStream.Length > wantedLength)
+                    {
+                        downloadedStream.SetLength(wantedLength);
+                    }
+                }
+
                 await downloadedStream.CopyToAsync(outputStream, cancellationToken).ConfigureAwait(false);
             }
         }
@@ -216,6 +228,9 @@ public sealed class RevisionReader : IDisposable
                     ++nextExpectedIndex;
 
                     yield return (block, false);
+
+                    if (_endBlockIndex.HasValue && nextExpectedIndex > MinBlockIndex + _endBlockIndex.Value.BlockNumber)
+                        yield break;
                 }
 
                 if (mustTryNextPageOfBlocks)

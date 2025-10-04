@@ -8,7 +8,8 @@ public interface IFileDownloader : IDisposable
         Stream contentOutputStream,
         Action<long, long> onProgress,
         CancellationToken cancellationToken,
-        long startPos = 0);
+        long startPos = 0,
+        long? endPos = null);
 
     public Task<VerificationStatus> DownloadAsync(
         INodeIdentity fileIdentity,

@@ -99,6 +99,7 @@ public sealed partial class Revision : IRevisionForTransfer
         Action<int> releaseBlockListingAction,
         CancellationToken cancellationToken,
         long startPos = 0,
+        long? endPos = null,
         byte[]? operationId = null)
     {
         if (revisionMetadata.State is RevisionState.Draft)
@@ -110,6 +111,11 @@ public sealed partial class Revision : IRevisionForTransfer
         var fileKey = await Node.GetKeyAsync(client, fileIdentity, cancellationToken).ConfigureAwait(false);
 
         var startBlockIndex = BlockUtils.GetBlockIndexFromFileIndex(revisionMetadata.BlockSizes, startPos);
+        BlockIndex? endBlockIndex = null;
+        if (endPos.HasValue)
+        {
+            endBlockIndex = BlockUtils.GetBlockIndexFromFileIndex(revisionMetadata.BlockSizes, endPos.Value);
+        }
 
         var revisionResponse = await client.FilesApi.GetRevisionAsync(
             fileIdentity.ShareId,
@@ -121,7 +127,7 @@ public sealed partial class Revision : IRevisionForTransfer
             cancellationToken,
             operationId).ConfigureAwait(false);
 
-        return new RevisionReader(client, fileIdentity, revisionMetadata, fileKey, contentKey, revisionResponse, startBlockIndex, releaseBlockListingAction);
+        return new RevisionReader(client, fileIdentity, revisionMetadata, fileKey, contentKey, revisionResponse, startBlockIndex, endBlockIndex, releaseBlockListingAction);
     }
 
     internal static async Task<RevisionWriter> OpenForWritingAsync(
