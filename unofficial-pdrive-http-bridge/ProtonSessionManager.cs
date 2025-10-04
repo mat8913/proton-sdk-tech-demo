@@ -1,4 +1,6 @@
 using System;
+using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,6 +20,7 @@ public sealed class ProtonSessionManager(
     private readonly IServiceProvider _serviceProvider = serviceProvider;
     private readonly PersistenceManager _persistenceManager = persistenceManager;
     private readonly SessionStorage _sessionStorage = sessionStorage;
+    private readonly SemaphoreSlim _sync = new(1, 1);
 
     public ProtonSession? ProtonSession { get; private set; }
 
@@ -26,15 +29,66 @@ public sealed class ProtonSessionManager(
         if (ProtonSession is not null)
             return;
 
-        var apiSession = await TryResumeSession(ct);
-        if (apiSession is null)
-            return;
+        await TryResumeSession(ct);
+    }
 
-        await SetSession(apiSession, ct);
+    public async Task Login(string username, string password, string otpCode, CancellationToken ct)
+    {
+        await _sync.WaitAsync();
+        try
+        {
+            if (ProtonSession is not null)
+                throw new InvalidOperationException("Already logged in");
+
+            var options = GetProtonClientOptions();
+
+            var sessionBeginRequest = new SessionBeginRequest
+            {
+                Username = username,
+                Password = password,
+                Options = options,
+            };
+
+            var session = await ProtonApiSession.BeginAsync(sessionBeginRequest, ct);
+
+            if (session.IsWaitingForSecondFactorCode)
+            {
+                await session.ApplySecondFactorCodeAsync(otpCode, ct);
+
+                await session.ApplyDataPasswordAsync(Encoding.UTF8.GetBytes(password!), ct);
+            }
+
+            var tokens = await session.TokenCredential.GetAccessTokenAsync(ct);
+
+            var storedSession = new StoredSession
+            (
+                SessionId: session.SessionId.Value,
+                Username: session.Username,
+                UserId: session.UserId.Value,
+                AccessToken: tokens.AccessToken,
+                RefreshToken: tokens.RefreshToken,
+                Scopes: session.Scopes.ToArray(),
+                IsWaitingForSecondFactorCode: session.IsWaitingForSecondFactorCode,
+                PasswordMode: (int)session.PasswordMode
+            );
+
+            await _sessionStorage.StoreSession(storedSession, ct);
+
+            await SetSession(session, ct);
+        }
+        finally
+        {
+            _sync.Release();
+        }
     }
 
     private async Task SetSession(ProtonApiSession apiSession, CancellationToken ct)
     {
+        apiSession.TokenCredential.TokensRefreshed += (accessToken, refreshToken) =>
+        {
+            _sessionStorage.UpdateTokens(accessToken, refreshToken);
+        };
+
         var client = new ProtonDriveClient(apiSession);
         var nodeMetadataCacher = ActivatorUtilities.CreateInstance<NodeMetadataCacher>(_serviceProvider, client);
         var session = new ProtonSession(apiSession, client, nodeMetadataCacher);
@@ -42,15 +96,49 @@ public sealed class ProtonSessionManager(
         ProtonSession = session;
     }
 
-    private async Task<ProtonApiSession?> TryResumeSession(CancellationToken ct)
+    private async Task TryResumeSession(CancellationToken ct)
     {
-        var savedSessionN = await _sessionStorage.TryLoadSession(ct);
+        await _sync.WaitAsync();
+        try
+        {
+            // Shouldn't be possible
+            if (ProtonSession is not null)
+                return;
 
-        if (savedSessionN is null)
-            return null;
+            var savedSessionN = await _sessionStorage.TryLoadSession(ct);
 
-        var savedSession = savedSessionN.Value;
+            if (savedSessionN is null)
+                return;
 
+            var savedSession = savedSessionN.Value;
+
+            var options = GetProtonClientOptions();
+
+            var sessionResumeRequest = new SessionResumeRequest
+            {
+                SessionId = new() { Value = savedSession.SessionId },
+                Username = savedSession.Username,
+                UserId = new() { Value = savedSession.UserId },
+                AccessToken = savedSession.AccessToken,
+                RefreshToken = savedSession.RefreshToken,
+                IsWaitingForSecondFactorCode = savedSession.IsWaitingForSecondFactorCode,
+                PasswordMode = (PasswordMode)savedSession.PasswordMode,
+                Options = options,
+            };
+            sessionResumeRequest.Scopes.AddRange(savedSession.Scopes);
+
+            var session = ProtonApiSession.Resume(sessionResumeRequest);
+
+            await SetSession(session, ct);
+        }
+        finally
+        {
+            _sync.Release();
+        }
+    }
+
+    private ProtonClientOptions GetProtonClientOptions()
+    {
         var secretsCache = new DbSecretsCache(_persistenceManager);
 
         var options = new ProtonClientOptions
@@ -60,26 +148,6 @@ public sealed class ProtonSessionManager(
             LoggerFactory = new WarnLoggerFactory(_loggerFactory)
         };
 
-        var sessionResumeRequest = new SessionResumeRequest
-        {
-            SessionId = new() { Value = savedSession.SessionId },
-            Username = savedSession.Username,
-            UserId = new() { Value = savedSession.UserId },
-            AccessToken = savedSession.AccessToken,
-            RefreshToken = savedSession.RefreshToken,
-            IsWaitingForSecondFactorCode = savedSession.IsWaitingForSecondFactorCode,
-            PasswordMode = (PasswordMode)savedSession.PasswordMode,
-            Options = options,
-        };
-        sessionResumeRequest.Scopes.AddRange(savedSession.Scopes);
-
-        var session = ProtonApiSession.Resume(sessionResumeRequest);
-
-        session.TokenCredential.TokensRefreshed += (accessToken, refreshToken) =>
-        {
-            _sessionStorage.UpdateTokens(accessToken, refreshToken);
-        };
-
-        return session;
+        return options;
     }
 }

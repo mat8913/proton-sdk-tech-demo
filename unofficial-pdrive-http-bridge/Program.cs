@@ -9,6 +9,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Web;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.EnvironmentVariables;
@@ -118,6 +119,16 @@ public sealed class Program(
 
         _webserver.Routes.AuthenticateRequest = OnAuthenticateRequest;
 
+        _webserver.Routes.PostAuthentication.Static.Add(
+            HttpMethod.GET,
+            "/login",
+            ToHandler(OnGetLoginRequest));
+
+        _webserver.Routes.PostAuthentication.Static.Add(
+            HttpMethod.POST,
+            "/login",
+            ToHandler(OnPostLoginRequest));
+
         _webserver.Routes.PostAuthentication.Dynamic.Add(
             HttpMethod.GET,
             new Regex(@"^\/files(\/.*)?$"),
@@ -148,6 +159,37 @@ public sealed class Program(
     {
         ctx.Response.StatusCode = 404;
         await ctx.Response.Send("Not found.");
+    }
+
+    private async Task<HttpModels.LoginForm?> OnGetLoginRequest(HttpContextBase ctx)
+    {
+        return new HttpModels.LoginForm();
+    }
+
+    private async Task<HttpModels.LoginResult?> OnPostLoginRequest(HttpContextBase ctx)
+    {
+        var qs = HttpUtility.ParseQueryString(ctx.Request.DataAsString);
+        var username = qs["username"] ?? "";
+        var password = qs["password"] ?? "";
+        var otp = qs["otp"] ?? "";
+
+        try
+        {
+            await _protonSessionManager.Login(username, password, otp, ctx.Token);
+        }
+        catch (Exception ex)
+        {
+            return new HttpModels.LoginResult
+            {
+                Message = $"There was an error logging in.",
+                Error = $"{ex.Message}\n{ex.StackTrace}",
+            };
+        }
+
+        return new HttpModels.LoginResult
+        {
+            Message = "Logged in.",
+        };
     }
 
     private async Task<HttpModels.NodeChildren?> OnGetNodeContentByPathRequest(HttpContextBase ctx)
