@@ -34,8 +34,6 @@ public static class Converters
             Url = Uri.EscapeDataString(node.Name),
         };
 
-        Console.WriteLine(metadata.Url);
-
         if (node.IsFile)
         {
             metadata.Type = HttpModels.NodeType.File;
